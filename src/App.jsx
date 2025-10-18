@@ -131,7 +131,7 @@ function Gallery() {
                     </div>
                     <div style={{ marginTop: 10 }}>
                       <a href={waLinkFor(b)} target="_blank" rel="noreferrer" style={styles.waBtn}>
-                        Take this book on WhatsApp
+                        Order this Book
                       </a>
                     </div>
                   </div>
@@ -450,73 +450,73 @@ export default function App() {
 ...
 <div style={{ marginTop: 10 }}>
   <a href={waLinkFor(b)} target="_blank" rel="noreferrer" style={styles.waBtn}>
-    Take this book on WhatsApp
+    Order this Book
   </a>
 </div>
 // ...existing code...// ...existing code...
-<a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Take this book on WhatsApp">
+<a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Order this Book">
   <img src={b.imageURL || "/covers/placeholder.jpg"} alt={b.title} style={styles.cardImg}
     onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")} />
 </a>
 ...
 <div style={{ marginTop: 10 }}>
   <a href={waLinkFor(b)} target="_blank" rel="noreferrer" style={styles.waBtn}>
-    Take this book on WhatsApp
+    Order this Book
   </a>
 </div>
 // ...existing code...// ...existing code...
-<a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Take this book on WhatsApp">
+<a href={waLinkFor(b)} target="_blank" rel="noreferrer" title=" Order this Book">
   <img src={b.imageURL || "/covers/placeholder.jpg"} alt={b.title} style={styles.cardImg}
     onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")} />
 </a>
 ...
 <div style={{ marginTop: 10 }}>
   <a href={waLinkFor(b)} target="_blank" rel="noreferrer" style={styles.waBtn}>
-    Take this book on WhatsApp
+    Order This Book
   </a>
 </div>
 // ...existing code...// ...existing code...
-<a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Take this book on WhatsApp">
+<a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Order this Book">
   <img src={b.imageURL || "/covers/placeholder.jpg"} alt={b.title} style={styles.cardImg}
     onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")} />
 </a>
 ...
 <div style={{ marginTop: 10 }}>
   <a href={waLinkFor(b)} target="_blank" rel="noreferrer" style={styles.waBtn}>
-    Take this book on WhatsApp
+    Order this Book
   </a>
 </div>
 // ...existing code...// ...existing code...
-<a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Take this book on WhatsApp">
+<a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Order this Book">
   <img src={b.imageURL || "/covers/placeholder.jpg"} alt={b.title} style={styles.cardImg}
     onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")} />
 </a>
 ...
 <div style={{ marginTop: 10 }}>
   <a href={waLinkFor(b)} target="_blank" rel="noreferrer" style={styles.waBtn}>
-    Take this book on WhatsApp
+    Order this Book
   </a>
 </div>
 // ...existing code...// ...existing code...
-<a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Take this book on WhatsApp">
+<a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Order this Book">
   <img src={b.imageURL || "/covers/placeholder.jpg"} alt={b.title} style={styles.cardImg}
     onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")} />
 </a>
 ...
 <div style={{ marginTop: 10 }}>
   <a href={waLinkFor(b)} target="_blank" rel="noreferrer" style={styles.waBtn}>
-    Take this book on WhatsApp
+    Order this Book
   </a>
 </div>
 // ...existing code...// ...existing code...
-<a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Take this book on WhatsApp">
+<a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Order this Book">
   <img src={b.imageURL || "/covers/placeholder.jpg"} alt={b.title} style={styles.cardImg}
     onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")} />
 </a>
 ...
 <div style={{ marginTop: 10 }}>
   <a href={waLinkFor(b)} target="_blank" rel="noreferrer" style={styles.waBtn}>
-    Take this book on WhatsApp
+    Order this Book
   </a>
 </div>
 // ...existing code...
