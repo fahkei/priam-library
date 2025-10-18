@@ -445,3 +445,81 @@ export default function App() {
     </BrowserRouter>
   );
 }
+// ...existing code...
+<a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Order this book">
+  <img src={b.imageURL || "/covers/placeholder.jpg"} alt={b.title} style={styles.cardImg}
+    onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")} />
+</a>
+...
+<div style={{ marginTop: 10 }}>
+  <a href={waLinkFor(b)} target="_blank" rel="noreferrer" style={styles.waBtn}>
+    Take this book on WhatsApp
+  </a>
+</div>
+// ...existing code...// ...existing code...
+<a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Take this book on WhatsApp">
+  <img src={b.imageURL || "/covers/placeholder.jpg"} alt={b.title} style={styles.cardImg}
+    onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")} />
+</a>
+...
+<div style={{ marginTop: 10 }}>
+  <a href={waLinkFor(b)} target="_blank" rel="noreferrer" style={styles.waBtn}>
+    Take this book on WhatsApp
+  </a>
+</div>
+// ...existing code...// ...existing code...
+<a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Take this book on WhatsApp">
+  <img src={b.imageURL || "/covers/placeholder.jpg"} alt={b.title} style={styles.cardImg}
+    onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")} />
+</a>
+...
+<div style={{ marginTop: 10 }}>
+  <a href={waLinkFor(b)} target="_blank" rel="noreferrer" style={styles.waBtn}>
+    Take this book on WhatsApp
+  </a>
+</div>
+// ...existing code...// ...existing code...
+<a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Take this book on WhatsApp">
+  <img src={b.imageURL || "/covers/placeholder.jpg"} alt={b.title} style={styles.cardImg}
+    onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")} />
+</a>
+...
+<div style={{ marginTop: 10 }}>
+  <a href={waLinkFor(b)} target="_blank" rel="noreferrer" style={styles.waBtn}>
+    Take this book on WhatsApp
+  </a>
+</div>
+// ...existing code...// ...existing code...
+<a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Take this book on WhatsApp">
+  <img src={b.imageURL || "/covers/placeholder.jpg"} alt={b.title} style={styles.cardImg}
+    onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")} />
+</a>
+...
+<div style={{ marginTop: 10 }}>
+  <a href={waLinkFor(b)} target="_blank" rel="noreferrer" style={styles.waBtn}>
+    Take this book on WhatsApp
+  </a>
+</div>
+// ...existing code...// ...existing code...
+<a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Take this book on WhatsApp">
+  <img src={b.imageURL || "/covers/placeholder.jpg"} alt={b.title} style={styles.cardImg}
+    onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")} />
+</a>
+...
+<div style={{ marginTop: 10 }}>
+  <a href={waLinkFor(b)} target="_blank" rel="noreferrer" style={styles.waBtn}>
+    Take this book on WhatsApp
+  </a>
+</div>
+// ...existing code...// ...existing code...
+<a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Take this book on WhatsApp">
+  <img src={b.imageURL || "/covers/placeholder.jpg"} alt={b.title} style={styles.cardImg}
+    onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")} />
+</a>
+...
+<div style={{ marginTop: 10 }}>
+  <a href={waLinkFor(b)} target="_blank" rel="noreferrer" style={styles.waBtn}>
+    Take this book on WhatsApp
+  </a>
+</div>
+// ...existing code...
