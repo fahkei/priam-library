@@ -109,7 +109,7 @@ function Gallery() {
             <div style={styles.galleryGrid}>
               {list.map((b) => (
                 <article key={b.id} style={styles.card}>
-                  <a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Take this book on WhatsApp">
+                  <a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Order this book">
                     <img src={b.imageURL || "/covers/placeholder.jpg"} alt={b.title} style={styles.cardImg}
                       onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")} />
                   </a>
