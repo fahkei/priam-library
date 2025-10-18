@@ -18,6 +18,8 @@ import {
   deleteDoc,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
 
 /** PRIAM LIBRARY APP
  * - User: gallery (hides 'hidden' books, shows 'In circulation' badge when not available)
@@ -310,6 +312,67 @@ function AdminManageBooks() {
       alert("Failed to update availability: " + (e.message || ""));
     }
   }
+  // ---- EXPORTS ----
+  function exportJSON() {
+    const plain = books.map(({ id, ...rest }) => rest);
+    const blob = new Blob([JSON.stringify(plain, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "priam_books.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportCSV() {
+    const header = ["title","author","category","year","isbn","imageURL","available","hidden","createdAt"];
+    const rows = books.map(b => [
+      b.title || "",
+      b.author || "",
+      b.category || "",
+      b.year || "",
+      b.isbn || "",
+      b.imageURL || "",
+      b.available === false ? "false" : "true",
+      b.hidden ? "true" : "false",
+      b.createdAt?.toDate ? b.createdAt.toDate().toISOString() : ""
+    ]);
+    const csv = [header.join(","), ...rows.map(r => r.map(val => `"${String(val).replace(/"/g,'""')}"`).join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "priam_books.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportPDF() {
+    const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+    doc.setFontSize(14);
+    doc.text("PRIAM Library — Books Export", 40, 40);
+
+    const rows = books.map(b => ([
+      b.title || "",
+      b.author || "",
+      b.category || "",
+      b.year || "",
+      b.isbn || "",
+      b.available === false ? "No" : "Yes",
+      b.hidden ? "Hidden" : "Visible",
+    ]));
+
+    doc.autoTable({
+      startY: 60,
+      head: [["Title", "Author", "Category", "Year", "ISBN", "Available", "Visibility"]],
+      body: rows,
+      styles: { fontSize: 9, cellPadding: 4 },
+      headStyles: { fillColor: [33, 150, 243] },
+      margin: { left: 40, right: 40 },
+    });
+
+    doc.save("priam_books.pdf");
+  }
 
   async function setHidden(id, nextVal) {
     try {
@@ -332,6 +395,13 @@ function AdminManageBooks() {
   return (
     <section style={styles.card}>
       <h3 style={{ marginTop: 0 }}>Manage Books</h3>
+      {/* ---- Export Buttons ---- */}
+<div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+  <button onClick={exportJSON}>Export JSON</button>
+  <button onClick={exportCSV}>Export CSV</button>
+  <button onClick={exportPDF}>Export PDF</button>
+</div>
+
 
       <input
         placeholder="Search by title/author/ISBN"
