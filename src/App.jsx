@@ -52,6 +52,7 @@ function Gallery() {
   const [books, setBooks] = useState([]);
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("all");
+  const [showBackMap, setShowBackMap] = useState({});
 
   useEffect(() => {
     const qRef = query(collection(db, "books"), orderBy("createdAt", "desc"));
@@ -85,6 +86,13 @@ function Gallery() {
 
   const grouped = useMemo(() => groupBy(filtered, (b) => b.category), [filtered]);
 
+  // crude mobile check (good enough for Vite SPA)
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
+
+  function toggleFlip(id) {
+    setShowBackMap((m) => ({ ...m, [id]: !m[id] }));
+  }
+
   return (
     <div style={styles.page}>
       <header style={styles.header}>
@@ -116,30 +124,74 @@ function Gallery() {
           <section key={section} style={styles.section}>
             <div style={styles.sectionHead}><h2 style={{ margin: 0, fontSize: 20 }}>{section || "വിഭാഗമില്ല"}</h2></div>
             <div style={styles.galleryGrid}>
-              {list.map((b) => (
-                <article key={b.id} style={{ ...styles.card, position: "relative" }}>
-                  {b.available === false && (
-                    <div style={styles.badge}>In circulation</div>
-                  )}
-                  <a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Order this book">
-                    <img src={b.imageURL || "/covers/placeholder.jpg"} alt={b.title} style={styles.cardImg}
-                      onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")} />
-                  </a>
-                  <div style={{ padding: "8px 10px" }}>
-                    <div style={{ fontWeight: 700 }}>{b.title}</div>
-                    <div style={{ color: "#555", fontSize: 13 }}>{b.author || ""}</div>
-                    <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      {b.year && <span style={styles.pill}>വർഷം: {b.year}</span>}
-                      {b.isbn && <span style={styles.pill}>ISBN: {b.isbn}</span>}
+              {list.map((b) => {
+                const showBack = !!showBackMap[b.id];
+                const chosenURL = showBack ? (b.backImageURL || b.imageURL) : b.imageURL;
+                const isAvailable = b.available !== false;
+                const imgStyle = isMobile ? styles.cardImgMobile : styles.cardImg;
+
+                return (
+                  <article key={b.id} style={{ ...styles.card, position: "relative" }}>
+                    {b.available === false && (
+                      <div style={styles.badge}>In circulation</div>
+                    )}
+
+                    {/* Image or Title Placeholder */}
+                    {chosenURL ? (
+                      <img
+                        src={chosenURL}
+                        alt={b.title}
+                        style={imgStyle}
+                        onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")}
+                      />
+                    ) : (
+                      <div style={{ ...imgStyle, display: "grid", placeItems: "center", background: "#fafafa" }}>
+                        <div style={{ padding: 8, textAlign: "center", fontWeight: 700 }}>{b.title}</div>
+                      </div>
+                    )}
+
+                    {/* Flip button (front/back) */}
+                    <button
+                      title="Flip cover"
+                      onClick={() => toggleFlip(b.id)}
+                      style={styles.flipBtn}
+                    >
+                      🔁
+                    </button>
+
+                    <div style={{ padding: "8px 10px" }}>
+                      <div style={{ fontWeight: 700 }}>{b.title}</div>
+                      <div style={{ color: "#555", fontSize: 13 }}>{b.author || ""}</div>
+                      <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {b.year && <span style={styles.pill}>വർഷം: {b.year}</span>}
+                        {b.isbn && <span style={styles.pill}>ISBN: {b.isbn}</span>}
+                      </div>
+                      <div style={{ marginTop: 8 }}>
+                        <small>
+                          <button
+                            onClick={() => alert(b.description ? b.description : "No description yet.")}
+                            style={styles.moreLink}
+                          >
+                            More about the book
+                          </button>
+                        </small>
+                      </div>
+
+                      <div style={{ marginTop: 10 }}>
+                        <a
+                          href={waLinkFor(b)}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={isAvailable ? styles.waBtn : styles.waBtnDim}
+                          title={isAvailable ? "Order this book on WhatsApp" : "Order in advance on WhatsApp"}
+                        >
+                          {isAvailable ? "Order this Book" : "Order in advance"}
+                        </a>
+                      </div>
                     </div>
-                    <div style={{ marginTop: 10 }}>
-                      <a href={waLinkFor(b)} target="_blank" rel="noreferrer" style={styles.waBtn}>
-                        Order this Book
-                      </a>
-                    </div>
-                  </div>
-                </article>
-              ))}
+                  </article>
+                );
+              })}
             </div>
           </section>
         ))}
@@ -225,21 +277,33 @@ function AdminAddBook() {
   const [category, setCategory] = useState("");
   const [year, setYear] = useState("");
   const [isbn, setIsbn] = useState("");
-  const [file, setFile] = useState(null);
+  const [file, setFile] = useState(null);           // front cover
+  const [backFile, setBackFile] = useState(null);   // back cover (optional)
+  const [description, setDescription] = useState(""); // description (optional)
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
   async function handleSubmit(e) {
     e.preventDefault();
     if (!title.trim()) return setMsg("Title is required");
-    if (!file) return setMsg("Please choose a cover image");
+    if (!file) return setMsg("Please choose a front cover image");
     setMsg(""); setBusy(true);
 
     try {
-      const fileName = `${Date.now()}_${file.name}`;
-      const fileRef = ref(storage, `covers/${fileName}`);
-      await uploadBytes(fileRef, file);
-      const url = await getDownloadURL(fileRef);
+      // upload front cover
+      const frontName = `${Date.now()}_${file.name}`;
+      const frontRef = ref(storage, `covers/${frontName}`);
+      await uploadBytes(frontRef, file);
+      const frontURL = await getDownloadURL(frontRef);
+
+      // upload back cover if provided
+      let backURL = "";
+      if (backFile) {
+        const backName = `${Date.now()}_back_${backFile.name}`;
+        const backRef = ref(storage, `covers/${backName}`);
+        await uploadBytes(backRef, backFile);
+        backURL = await getDownloadURL(backRef);
+      }
 
       await addDoc(collection(db, "books"), {
         title: title.trim(),
@@ -247,13 +311,16 @@ function AdminAddBook() {
         category: category.trim(),
         year: year.trim(),
         isbn: isbn.trim(),
-        imageURL: url,
+        imageURL: frontURL,
+        backImageURL: backURL || "",
+        description: description.trim(),
         available: true,  // default available
         hidden: false,    // default visible to users
         createdAt: serverTimestamp(),
       });
 
-      setTitle(""); setAuthor(""); setCategory(""); setYear(""); setIsbn(""); setFile(null);
+      setTitle(""); setAuthor(""); setCategory(""); setYear(""); setIsbn("");
+      setFile(null); setBackFile(null); setDescription("");
       setMsg("✅ Book added successfully");
     } catch (e) {
       console.error(e);
@@ -273,8 +340,16 @@ function AdminAddBook() {
         <Field label="Year" value={year} onChange={setYear} />
         <Field label="ISBN" value={isbn} onChange={setIsbn} />
         <label style={{ display: "grid", gap: 4 }}>
-          <span>Cover image</span>
+          <span>Front cover</span>
           <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+        </label>
+        <label style={{ display: "grid", gap: 4 }}>
+          <span>Back cover (optional)</span>
+          <input type="file" accept="image/*" onChange={(e) => setBackFile(e.target.files?.[0] || null)} />
+        </label>
+        <label style={{ gridColumn: "1 / -1", display: "grid", gap: 4 }}>
+          <span>Description (optional)</span>
+          <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
         </label>
       </div>
       <div style={{ marginTop: 12 }}>
@@ -312,6 +387,7 @@ function AdminManageBooks() {
       alert("Failed to update availability: " + (e.message || ""));
     }
   }
+
   // ---- EXPORTS ----
   function exportJSON() {
     const plain = books.map(({ id, ...rest }) => rest);
@@ -325,7 +401,7 @@ function AdminManageBooks() {
   }
 
   function exportCSV() {
-    const header = ["title","author","category","year","isbn","imageURL","available","hidden","createdAt"];
+    const header = ["title","author","category","year","isbn","imageURL","backImageURL","description","available","hidden","createdAt"];
     const rows = books.map(b => [
       b.title || "",
       b.author || "",
@@ -333,6 +409,8 @@ function AdminManageBooks() {
       b.year || "",
       b.isbn || "",
       b.imageURL || "",
+      b.backImageURL || "",
+      (b.description || "").replace(/\r?\n/g, " "),
       b.available === false ? "false" : "true",
       b.hidden ? "true" : "false",
       b.createdAt?.toDate ? b.createdAt.toDate().toISOString() : ""
@@ -348,80 +426,79 @@ function AdminManageBooks() {
   }
 
   async function exportPDF() {
-  const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
-  pdf.setFontSize(14);
-  pdf.text("PRIAM Library — Books Export with Covers", 40, 40);
+    const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+    pdf.setFontSize(14);
+    pdf.text("PRIAM Library — Books Export with Covers", 40, 40);
 
-  // Load image → draw to canvas → get dataURL (avoids fetch/CORS issues)
-  function imgUrlToDataURL(url) {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.crossOrigin = "anonymous";            // IMPORTANT for canvas
-      img.onload = () => {
-        try {
-          const canvas = document.createElement("canvas");
-          canvas.width = img.naturalWidth;
-          canvas.height = img.naturalHeight;
-          const ctx = canvas.getContext("2d");
-          ctx.drawImage(img, 0, 0);
-          const data = canvas.toDataURL("image/png");
-          resolve(data);
-        } catch (e) {
-          resolve(null);
-        }
-      };
-      img.onerror = () => resolve(null);
-      img.src = url;
-    });
-  }
-
-  const x0 = 40, y0 = 60;
-  const imgW = 60, imgH = 80, gap = 14;
-  const cols = 3;
-  const pageH = pdf.internal.pageSize.getHeight();
-
-  let col = 0, x = x0, y = y0;
-
-  for (const b of books) {
-    const url = b.imageURL || "/covers/placeholder.jpg";
-    const dataURL = await imgUrlToDataURL(url);
-
-    if (dataURL) {
-      pdf.addImage(dataURL, "PNG", x, y, imgW, imgH);
-    } else {
-      // fallback: draw a light gray placeholder
-      pdf.setFillColor(240);
-      pdf.rect(x, y, imgW, imgH, "F");
+    // Load image → draw to canvas → get dataURL (avoids fetch/CORS issues)
+    function imgUrlToDataURL(url) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => {
+          try {
+            const canvas = document.createElement("canvas");
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0);
+            const data = canvas.toDataURL("image/png");
+            resolve(data);
+          } catch (e) {
+            resolve(null);
+          }
+        };
+        img.onerror = () => resolve(null);
+        img.src = url;
+      });
     }
 
-    // Text under image
-    pdf.setFontSize(9);
-    const title = b.title || "Untitled";
-    const author = b.author ? `by ${b.author}` : "";
-    const status = b.available === false ? "In circulation" : "";
+    const x0 = 40, y0 = 60;
+    const imgW = 60, imgH = 80, gap = 14;
+    const cols = 3;
+    const pageH = pdf.internal.pageSize.getHeight();
 
-    pdf.text(title, x, y + imgH + 12, { maxWidth: imgW });
-    if (author) pdf.text(author, x, y + imgH + 24, { maxWidth: imgW });
-    if (status) pdf.text(status, x, y + imgH + 36, { maxWidth: imgW });
+    let col = 0, x = x0, y = y0;
 
-    // next cell
-    col++;
-    if (col >= cols) {
-      col = 0;
-      x = x0;
-      y += imgH + 60;
-      if (y > pageH - 100) {
-        pdf.addPage();
-        y = y0;
+    for (const b of books) {
+      const url = b.imageURL || "/covers/placeholder.jpg";
+      const dataURL = await imgUrlToDataURL(url);
+
+      if (dataURL) {
+        pdf.addImage(dataURL, "PNG", x, y, imgW, imgH);
+      } else {
+        // fallback: draw a light gray placeholder
+        pdf.setFillColor(240);
+        pdf.rect(x, y, imgW, imgH, "F");
       }
-    } else {
-      x += imgW + gap;
+
+      // Text under image
+      pdf.setFontSize(9);
+      const title = b.title || "Untitled";
+      const author = b.author ? `by ${b.author}` : "";
+      const status = b.available === false ? "In circulation" : "";
+
+      pdf.text(title, x, y + imgH + 12, { maxWidth: imgW });
+      if (author) pdf.text(author, x, y + imgH + 24, { maxWidth: imgW });
+      if (status) pdf.text(status, x, y + imgH + 36, { maxWidth: imgW });
+
+      // next cell
+      col++;
+      if (col >= cols) {
+        col = 0;
+        x = x0;
+        y += imgH + 60;
+        if (y > pageH - 100) {
+          pdf.addPage();
+          y = y0;
+        }
+      } else {
+        x += imgW + gap;
+      }
     }
+
+    pdf.save("priam_books_with_images.pdf");
   }
-
-  pdf.save("priam_books_with_images.pdf");
-}
-
 
   async function setHidden(id, nextVal) {
     try {
@@ -444,13 +521,13 @@ function AdminManageBooks() {
   return (
     <section style={styles.card}>
       <h3 style={{ marginTop: 0 }}>Manage Books</h3>
-      {/* ---- Export Buttons ---- */}
-<div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
-  <button onClick={exportJSON}>Export JSON</button>
-  <button onClick={exportCSV}>Export CSV</button>
-  <button onClick={exportPDF}>Export PDF</button>
-</div>
 
+      {/* ---- Export Buttons ---- */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+        <button onClick={exportJSON}>Export JSON</button>
+        <button onClick={exportCSV}>Export CSV</button>
+        <button onClick={exportPDF}>Export PDF</button>
+      </div>
 
       <input
         placeholder="Search by title/author/ISBN"
@@ -538,16 +615,28 @@ const styles = {
   sectionHead: { padding: "10px 14px", borderBottom: "1px solid #eee", background: "#f7f9ff" },
 
   galleryGrid: { padding: 12, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 12 },
+
+  // desktop image
   card: { background: "#fff", border: "1px solid #eee", borderRadius: 12, overflow: "hidden", display: "grid" },
   cardImg: { width: "100%", height: 220, objectFit: "cover", display: "block", background: "#fafafa" },
 
+  // mobile image: show full image (contain)
+  cardImgMobile: { width: "100%", height: 220, objectFit: "contain", display: "block", background: "#fff" },
+
+  flipBtn: { position: "absolute", top: 8, right: 8, border: "1px solid #ddd", background: "#fff", borderRadius: 8, padding: "2px 6px", cursor: "pointer" },
+
   pill: { fontSize: 12, border: "1px solid #ddd", borderRadius: 999, padding: "2px 8px", background: "#fff" },
+
+  // WhatsApp buttons
   waBtn: { display: "inline-block", textDecoration: "none", border: "1px solid #25D366", background: "#25D366", color: "#fff", padding: "6px 10px", borderRadius: 8, fontSize: 14 },
+  waBtnDim: { display: "inline-block", textDecoration: "none", border: "1px solid #bbb", background: "#bbb", color: "#fff", padding: "6px 10px", borderRadius: 8, fontSize: 14, opacity: 0.95 },
 
   badge: { position: "absolute", top: 8, left: 8, background: "#b00020", color: "#fff", fontSize: 12, padding: "2px 8px", borderRadius: 999, boxShadow: "0 1px 2px rgba(0,0,0,0.2)" },
 
   th: { textAlign: "left", padding: 8, background: "#f8f8f8", fontWeight: 600, borderBottom: "1px solid #eee" },
   td: { padding: 8 },
+
+  moreLink: { border: "none", background: "none", color: "#2563eb", cursor: "pointer", fontSize: 12, padding: 0, textDecoration: "underline" },
 };
 
 /* ---- Router ---- */
