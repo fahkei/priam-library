@@ -347,32 +347,81 @@ function AdminManageBooks() {
     URL.revokeObjectURL(url);
   }
 
-  function exportPDF() {
-    const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
-    doc.setFontSize(14);
-    doc.text("PRIAM Library — Books Export", 40, 40);
+  async function exportPDF() {
+  const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+  pdf.setFontSize(14);
+  pdf.text("PRIAM Library — Books Export with Covers", 40, 40);
 
-    const rows = books.map(b => ([
-      b.title || "",
-      b.author || "",
-      b.category || "",
-      b.year || "",
-      b.isbn || "",
-      b.available === false ? "No" : "Yes",
-      b.hidden ? "Hidden" : "Visible",
-    ]));
-
-    doc.autoTable({
-      startY: 60,
-      head: [["Title", "Author", "Category", "Year", "ISBN", "Available", "Visibility"]],
-      body: rows,
-      styles: { fontSize: 9, cellPadding: 4 },
-      headStyles: { fillColor: [33, 150, 243] },
-      margin: { left: 40, right: 40 },
+  // Load image → draw to canvas → get dataURL (avoids fetch/CORS issues)
+  function imgUrlToDataURL(url) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";            // IMPORTANT for canvas
+      img.onload = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0);
+          const data = canvas.toDataURL("image/png");
+          resolve(data);
+        } catch (e) {
+          resolve(null);
+        }
+      };
+      img.onerror = () => resolve(null);
+      img.src = url;
     });
-
-    doc.save("priam_books.pdf");
   }
+
+  const x0 = 40, y0 = 60;
+  const imgW = 60, imgH = 80, gap = 14;
+  const cols = 3;
+  const pageH = pdf.internal.pageSize.getHeight();
+
+  let col = 0, x = x0, y = y0;
+
+  for (const b of books) {
+    const url = b.imageURL || "/covers/placeholder.jpg";
+    const dataURL = await imgUrlToDataURL(url);
+
+    if (dataURL) {
+      pdf.addImage(dataURL, "PNG", x, y, imgW, imgH);
+    } else {
+      // fallback: draw a light gray placeholder
+      pdf.setFillColor(240);
+      pdf.rect(x, y, imgW, imgH, "F");
+    }
+
+    // Text under image
+    pdf.setFontSize(9);
+    const title = b.title || "Untitled";
+    const author = b.author ? `by ${b.author}` : "";
+    const status = b.available === false ? "In circulation" : "";
+
+    pdf.text(title, x, y + imgH + 12, { maxWidth: imgW });
+    if (author) pdf.text(author, x, y + imgH + 24, { maxWidth: imgW });
+    if (status) pdf.text(status, x, y + imgH + 36, { maxWidth: imgW });
+
+    // next cell
+    col++;
+    if (col >= cols) {
+      col = 0;
+      x = x0;
+      y += imgH + 60;
+      if (y > pageH - 100) {
+        pdf.addPage();
+        y = y0;
+      }
+    } else {
+      x += imgW + gap;
+    }
+  }
+
+  pdf.save("priam_books_with_images.pdf");
+}
+
 
   async function setHidden(id, nextVal) {
     try {
