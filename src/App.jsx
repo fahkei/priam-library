@@ -1,45 +1,27 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { BrowserRouter, Routes, Route, Link, Navigate, useNavigate } from "react-router-dom";
+import { auth, db, storage } from "./firebase";
+import {
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+} from "firebase/auth";
+import {
+  collection,
+  addDoc,
+  serverTimestamp,
+  onSnapshot,
+  query,
+  orderBy,
+} from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
-/** PRIAM — Gallery UI + Admin form + WhatsApp action **/
+/** PRIAM LIBRARY APP
+ * - User side (gallery with WhatsApp)
+ * - Admin side (login + upload book + image)
+ */
 
-// 👉 Set your WhatsApp number here (country code + number, no + or spaces)
-const WHATSAPP_NUMBER = "91XXXXXXXXXX"; // e.g., 9198xxxxxxx
-
-// LocalStorage keys
-const LS_KEYS = {
-  BOOKS: "priam_books_v2",
-};
-
-// Tiny helpers
-const uuid = () =>
-  (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)) +
-  Date.now().toString(36);
-
-function useLocalStorage(key, initialValue) {
-  const [state, setState] = useState(() => {
-    try {
-      const raw = localStorage.getItem(key);
-      return raw ? JSON.parse(raw) : initialValue;
-    } catch {
-      return initialValue;
-    }
-  });
-  useEffect(() => {
-    try {
-      localStorage.setItem(key, JSON.stringify(state));
-    } catch {}
-  }, [key, state]);
-  return [state, setState];
-}
-
-function groupBy(list, keyFn) {
-  const out = {};
-  list.forEach((x) => {
-    const k = keyFn(x) || "മറ്റുള്ളവ";
-    (out[k] ||= []).push(x);
-  });
-  return out;
-}
+const WHATSAPP_NUMBER = "919746832552"; // change this to your number, no '+'
 
 function waLinkFor(book) {
   const title = book.title || "";
@@ -54,54 +36,29 @@ function waLinkFor(book) {
   return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`;
 }
 
-function toCSV(books) {
-  const header = ["title","author","category","year","isbn","image"];
-  const rows = books.map(b => [
-    b.title || "", b.author || "", b.category || "", b.year || "", b.isbn || "", b.image || ""
-  ]);
-  return [header.join(","), ...rows.map(r => r.join(","))].join("\n");
-}
-function download(filename, text, type="text/plain") {
-  const blob = new Blob([text], { type });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = filename; document.body.appendChild(a); a.click();
-  a.remove(); URL.revokeObjectURL(url);
+function groupBy(list, keyFn) {
+  const out = {};
+  list.forEach((x) => {
+    const k = keyFn(x) || "മറ്റുള്ളവ";
+    (out[k] ||= []).push(x);
+  });
+  return out;
 }
 
-export default function App() {
-  const [tab, setTab] = useState("gallery");
-
-  // Books live in localStorage; we load shared catalog.json on first visit
-  const [books, setBooks] = useLocalStorage(LS_KEYS.BOOKS, []);
+/* ---------- USER SIDE ---------- */
+function Gallery() {
+  const [books, setBooks] = useState([]);
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("all");
 
-  const fileRef = useRef(null);
-  const jsonRef = useRef(null);
-
-  // One-time fetch from /catalog.json on empty state
   useEffect(() => {
-    if (books.length === 0) {
-      fetch("/catalog.json")
-        .then((r) => (r.ok ? r.json() : []))
-        .then((list) => {
-          if (Array.isArray(list) && list.length) {
-            const normalized = list.map((b) => ({
-              id: uuid(),
-              title: b.title || "",
-              author: b.author || "",
-              category: b.category || "",
-              year: b.year || "",
-              isbn: b.isbn || "",
-              image: b.image || "/covers/placeholder.jpg",
-            }));
-            setBooks(normalized);
-          }
-        })
-        .catch(() => {});
-    }
-  }, []); // run once
+    const qRef = query(collection(db, "books"), orderBy("createdAt", "desc"));
+    const unsub = onSnapshot(qRef, (snap) => {
+      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setBooks(rows);
+    });
+    return () => unsub();
+  }, []);
 
   const categories = useMemo(() => {
     const s = new Set();
@@ -121,299 +78,233 @@ export default function App() {
     });
   }, [books, q, cat]);
 
-  const byCategory = useMemo(
-    () => groupBy(filtered, (b) => b.category),
-    [filtered]
-  );
-
-  // ---- CSV/JSON Import/Export ----
-  function exportCSV() {
-    download("priam_books.csv", toCSV(books), "text/csv");
-  }
-  function exportJSON() {
-    const plain = books.map(({id, ...rest}) => rest);
-    download("catalog.json", JSON.stringify(plain, null, 2), "application/json");
-  }
-  function importCSV(file) {
-    if (!file) return;
-    file.text().then((text) => {
-      const lines = text.split(/\r?\n/).filter(Boolean);
-      if (lines.length <= 1) return alert("CSV must have header: title,author,category,year,isbn,image");
-      const header = lines[0].split(",").map((x) => x.trim().toLowerCase());
-      const idx = (n) => header.indexOf(n);
-      const iT = idx("title"), iA = idx("author"), iC = idx("category"),
-            iY = idx("year"), iI = idx("isbn"), iM = idx("image");
-      const rows = [];
-      for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(",");
-        if (!cols[iT]) continue;
-        rows.push({
-          id: uuid(),
-          title: (cols[iT] || "").trim(),
-          author: (cols[iA] || "").trim(),
-          category: (cols[iC] || "").trim(),
-          year: (cols[iY] || "").trim(),
-          isbn: (cols[iI] || "").trim(),
-          image: (cols[iM] || "/covers/placeholder.jpg").trim(),
-        });
-      }
-      if (!rows.length) return alert("No rows found.");
-      setBooks((prev) => [...rows, ...prev]);
-      alert(`Imported ${rows.length} book(s).`);
-    });
-  }
-  function importJSON(file) {
-    if (!file) return;
-    file.text().then((text) => {
-      try {
-        const list = JSON.parse(text);
-        if (!Array.isArray(list) || !list.length) return alert("Invalid catalog.json");
-        const rows = list.map((b) => ({
-          id: uuid(),
-          title: b.title || "",
-          author: b.author || "",
-          category: b.category || "",
-          year: b.year || "",
-          isbn: b.isbn || "",
-          image: b.image || "/covers/placeholder.jpg",
-        }));
-        setBooks(rows);
-        alert(`Loaded ${rows.length} book(s) from catalog.json`);
-      } catch {
-        alert("Invalid JSON");
-      }
-    });
-  }
-
-  // ---- Admin add book form state ----
-  const [form, setForm] = useState({
-    title: "", author: "", category: "", year: "", isbn: "", image: "/covers/placeholder.jpg"
-  });
-  function addBook() {
-    if (!form.title.trim()) return alert("Title is required");
-    setBooks(prev => [{ id: uuid(), ...form }, ...prev]);
-    setForm({ title:"", author:"", category:"", year:"", isbn:"", image:"/covers/placeholder.jpg" });
-    alert("Book added (saved to your browser). For ALL users to see it, put the image in public/covers and Export JSON → replace public/catalog.json → push.");
-  }
+  const grouped = useMemo(() => groupBy(filtered, (b) => b.category), [filtered]);
 
   return (
     <div style={styles.page}>
-      {/* Header */}
       <header style={styles.header}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div style={styles.logoBox}>📚</div>
           <div>
             <div style={{ fontWeight: 700 }}>പ്രിയം ലൈബ്രറി (PRIAM)</div>
-            <div style={{ fontSize: 12, color: "#555" }}>
-              വീട്ടിലെത്തുന്ന വായന · Browse · Request · Deliver
-            </div>
+            <div style={{ fontSize: 12, color: "#555" }}>വീട്ടിലെത്തുന്ന വായന</div>
           </div>
         </div>
-
-        {/* Actions */}
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button onClick={exportCSV}>Export CSV</button>
-          <button onClick={() => fileRef.current?.click()}>Import CSV</button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".csv"
-            style={{ display: "none" }}
-            onChange={(e) => importCSV(e.target.files?.[0])}
-          />
-          <button onClick={exportJSON}>Export JSON</button>
-          <button onClick={() => jsonRef.current?.click()}>Import JSON</button>
-          <input
-            ref={jsonRef}
-            type="file"
-            accept="application/json,.json"
-            style={{ display: "none" }}
-            onChange={(e) => importJSON(e.target.files?.[0])}
-          />
-        </div>
+        <nav style={{ display: "flex", gap: 8 }}>
+          <Link to="/" style={styles.tabActive}>User</Link>
+          <Link to="/admin" style={styles.tab}>Admin</Link>
+        </nav>
       </header>
 
-      {/* Tabs */}
-      <nav style={styles.tabs}>
-        {["gallery", "admin", "settings"].map((k) => (
-          <button
-            key={k}
-            onClick={() => setTab(k)}
-            style={tab === k ? styles.tabActive : styles.tab}
-          >
-            {k === "gallery" ? "📖 Gallery" : k === "admin" ? "🛠️ Admin" : "Settings"}
-          </button>
-        ))}
-      </nav>
-
       <main style={styles.main}>
-        {/* GALLERY */}
-        {tab === "gallery" && (
-          <section style={{ display: "grid", gap: 16 }}>
-            {/* Search + Filter */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 240px", gap: 8 }}>
-              <input
-                placeholder="പുസ്തകം / Author / ISBN search…"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-              />
-              <select value={cat} onChange={(e) => setCat(e.target.value)}>
-                {categories.map((c) => (
-                  <option key={c} value={c}>
-                    {c === "all" ? "All categories" : c}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Big Malayalam Welcome */}
-            <div style={{ padding: 14, border: "1px solid #ddd", borderRadius: 12, background: "#fff" }}>
-              <h1 style={{ margin: "0 0 6px 0", fontSize: 28, textAlign: "center" }}>
-                പ്രിയം ലൈബ്രറിയിലേക്ക് സ്വാഗതം!
-              </h1>
-              <p style={{ margin: 0, textAlign: "center", color: "#666" }}>
-                ചിത്രം ക്ലിക്ക് ചെയ്ത് “Take this book on WhatsApp” — നിങ്ങളുടെ വീട് വരെ ഡെലിവറി ✨
-              </p>
-            </div>
-
-            {/* Sectioned blocks like your PDF */}
-            {Object.entries(byCategory).map(([section, list]) => (
-              <div key={section} style={styles.section}>
-                <div style={styles.sectionHead}>
-                  <h2 style={{ margin: 0, fontSize: 20 }}>{section || "വിഭാഗമില്ല"}</h2>
-                </div>
-
-                <div style={styles.galleryGrid}>
-                  {list.map((b) => (
-                    <article key={b.id} style={styles.card}>
-                      <a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Take this book on WhatsApp">
-                        <img
-                          src={b.image || "/covers/placeholder.jpg"}
-                          alt={b.title}
-                          style={styles.cardImg}
-                          onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")}
-                        />
-                      </a>
-                      <div style={{ padding: "8px 10px" }}>
-                        <div style={{ fontWeight: 700, marginBottom: 4 }}>{b.title}</div>
-                        <div style={{ color: "#555", fontSize: 13 }}>
-                          {b.author || ""}
-                        </div>
-                        <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                          {b.year ? <span style={styles.pill}>വർഷം: {b.year}</span> : null}
-                          {b.isbn ? <span style={styles.pill}>ISBN: {b.isbn}</span> : null}
-                        </div>
-                        <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
-                          <a
-                            href={waLinkFor(b)}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={styles.waBtn}
-                            title="Open WhatsApp"
-                          >
-                            Take this book on WhatsApp
-                          </a>
-                        </div>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 240px", gap: 8, marginBottom: 16 }}>
+          <input placeholder="Search title/author/ISBN…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <select value={cat} onChange={(e) => setCat(e.target.value)}>
+            {categories.map((c) => (
+              <option key={c} value={c}>{c === "all" ? "All categories" : c}</option>
             ))}
-          </section>
-        )}
+          </select>
+        </div>
 
-        {/* ADMIN (add books including image URL) */}
-        {tab === "admin" && (
-          <section style={styles.card}>
-            <h3 style={{ marginTop: 0 }}>Add Book</h3>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <Field label="Title" value={form.title} onChange={(v)=>setForm({...form, title:v})}/>
-              <Field label="Author" value={form.author} onChange={(v)=>setForm({...form, author:v})}/>
-              <Field label="Category (Malayalam ok)" value={form.category} onChange={(v)=>setForm({...form, category:v})}/>
-              <Field label="Year" value={form.year} onChange={(v)=>setForm({...form, year:v})}/>
-              <Field label="ISBN" value={form.isbn} onChange={(v)=>setForm({...form, isbn:v})}/>
-              <Field label="Image URL (e.g., /covers/meesha.jpg)" value={form.image} onChange={(v)=>setForm({...form, image:v})}/>
+        {Object.entries(grouped).map(([section, list]) => (
+          <section key={section} style={styles.section}>
+            <div style={styles.sectionHead}><h2 style={{ margin: 0, fontSize: 20 }}>{section || "വിഭാഗമില്ല"}</h2></div>
+            <div style={styles.galleryGrid}>
+              {list.map((b) => (
+                <article key={b.id} style={styles.card}>
+                  <a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Take this book on WhatsApp">
+                    <img src={b.imageURL || "/covers/placeholder.jpg"} alt={b.title} style={styles.cardImg}
+                      onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")} />
+                  </a>
+                  <div style={{ padding: "8px 10px" }}>
+                    <div style={{ fontWeight: 700 }}>{b.title}</div>
+                    <div style={{ color: "#555", fontSize: 13 }}>{b.author || ""}</div>
+                    <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {b.year && <span style={styles.pill}>വർഷം: {b.year}</span>}
+                      {b.isbn && <span style={styles.pill}>ISBN: {b.isbn}</span>}
+                    </div>
+                    <div style={{ marginTop: 10 }}>
+                      <a href={waLinkFor(b)} target="_blank" rel="noreferrer" style={styles.waBtn}>
+                        Take this book on WhatsApp
+                      </a>
+                    </div>
+                  </div>
+                </article>
+              ))}
             </div>
-            <div style={{ marginTop: 10 }}>
-              <img src={form.image || "/covers/placeholder.jpg"} alt="preview" style={{ width: 180, height: 220, objectFit: "cover", border:"1px solid #ddd", borderRadius: 8 }}/>
-            </div>
-            <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button onClick={addBook}>Add book</button>
-              <button onClick={exportJSON}>Export JSON (replace public/catalog.json)</button>
-            </div>
-            <p style={{ color:"#b00020", marginTop: 8 }}>
-              Note: For images to show to everyone, put files in <code>public/covers/</code> and set Image URL to <code>/covers/filename.jpg</code>, then commit & push.
-            </p>
           </section>
-        )}
-
-        {/* SETTINGS */}
-        {tab === "settings" && (
-          <section style={styles.card}>
-            <h3 style={{ marginTop: 0 }}>Settings & Help</h3>
-            <ul>
-              <li>
-                Place images in <code>public/covers/</code>, and set each book’s <code>image</code> to <code>/covers/filename.jpg</code>.
-              </li>
-              <li>
-                Shared catalogue file lives at <code>public/catalog.json</code>. Use <b>Export JSON</b> to generate it after adding books.
-              </li>
-              <li>
-                WhatsApp number (with country code) is set at the top of <code>App.jsx</code> in <code>WHATSAPP_NUMBER</code>.
-              </li>
-            </ul>
-          </section>
-        )}
+        ))}
       </main>
     </div>
   );
 }
 
-/* Reusable UI */
+/* ---------- ADMIN SIDE ---------- */
+function Admin() {
+  const [user, setUser] = useState(null);
+  const nav = useNavigate();
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => setUser(u));
+    return () => unsub();
+  }, []);
+
+  if (!user) return <AdminLogin />;
+
+  return (
+    <div style={styles.page}>
+      <header style={styles.header}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={styles.logoBox}>🛠️</div>
+          <div>
+            <div style={{ fontWeight: 700 }}>Admin — PRIAM</div>
+            <div style={{ fontSize: 12, color: "#555" }}>Add books + upload images</div>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={async () => { await signOut(auth); nav("/"); }}>Logout</button>
+        </div>
+      </header>
+      <main style={styles.main}>
+        <AdminAddBook />
+      </main>
+    </div>
+  );
+}
+
+function AdminLogin() {
+  const [email, setEmail] = useState("");
+  const [pass, setPass] = useState("");
+  const [err, setErr] = useState("");
+
+  async function doLogin(e) {
+    e.preventDefault();
+    try {
+      await signInWithEmailAndPassword(auth, email.trim(), pass);
+    } catch (e) {
+      setErr(e.message || "Login failed");
+    }
+  }
+
+  return (
+    <div style={{ ...styles.page, display: "grid", placeItems: "center" }}>
+      <form onSubmit={doLogin} style={{ ...styles.card, width: 360 }}>
+        <h3 style={{ marginTop: 0 }}>Admin Login</h3>
+        <label style={{ display: "grid", gap: 4 }}>
+          <span>Email</span>
+          <input value={email} onChange={(e) => setEmail(e.target.value)} />
+        </label>
+        <label style={{ display: "grid", gap: 4 }}>
+          <span>Password</span>
+          <input type="password" value={pass} onChange={(e) => setPass(e.target.value)} />
+        </label>
+        {err && <div style={{ color: "#b00020", fontSize: 12 }}>{err}</div>}
+        <button type="submit" style={{ marginTop: 8 }}>Login</button>
+        <div style={{ marginTop: 8 }}><Link to="/">← Back to site</Link></div>
+      </form>
+    </div>
+  );
+}
+
+function AdminAddBook() {
+  const [title, setTitle] = useState("");
+  const [author, setAuthor] = useState("");
+  const [category, setCategory] = useState("");
+  const [year, setYear] = useState("");
+  const [isbn, setIsbn] = useState("");
+  const [file, setFile] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!title.trim()) return setMsg("Title is required");
+    if (!file) return setMsg("Please choose a cover image");
+    setMsg(""); setBusy(true);
+
+    try {
+      const fileName = `${Date.now()}_${file.name}`;
+      const fileRef = ref(storage, `covers/${fileName}`);
+      await uploadBytes(fileRef, file);
+      const url = await getDownloadURL(fileRef);
+
+      await addDoc(collection(db, "books"), {
+        title: title.trim(),
+        author: author.trim(),
+        category: category.trim(),
+        year: year.trim(),
+        isbn: isbn.trim(),
+        imageURL: url,
+        createdAt: serverTimestamp(),
+      });
+
+      setTitle(""); setAuthor(""); setCategory(""); setYear(""); setIsbn(""); setFile(null);
+      setMsg("✅ Book added successfully");
+    } catch (e) {
+      console.error(e);
+      setMsg("Upload failed: " + (e.message || ""));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} style={styles.card}>
+      <h3 style={{ marginTop: 0 }}>Add Book</h3>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <Field label="Title" value={title} onChange={setTitle} />
+        <Field label="Author" value={author} onChange={setAuthor} />
+        <Field label="Category" value={category} onChange={setCategory} />
+        <Field label="Year" value={year} onChange={setYear} />
+        <Field label="ISBN" value={isbn} onChange={setIsbn} />
+        <label style={{ display: "grid", gap: 4 }}>
+          <span>Cover image</span>
+          <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+        </label>
+      </div>
+      <div style={{ marginTop: 12 }}>
+        <button disabled={busy} type="submit">{busy ? "Uploading…" : "Add book"}</button>
+        {msg && <div style={{ marginTop: 8, color: msg.startsWith("✅") ? "#0a7d33" : "#b00020" }}>{msg}</div>}
+      </div>
+    </form>
+  );
+}
+
 function Field({ label, value, onChange }) {
   return (
     <label style={{ display: "grid", gap: 4 }}>
       <span style={{ fontSize: 12, color: "#333" }}>{label}</span>
-      <input value={value} onChange={e => onChange(e.target.value)} />
+      <input value={value} onChange={(e) => onChange(e.target.value)} />
     </label>
   );
 }
 
-/* -------------- Styles -------------- */
 const styles = {
   page: { fontFamily: "system-ui, Arial, sans-serif", background: "#f7f7fb", minHeight: "100vh" },
   header: { position: "sticky", top: 0, zIndex: 10, background: "#fff", borderBottom: "1px solid #ddd", padding: "12px 16px",
             display: "flex", justifyContent: "space-between", alignItems: "center" },
   logoBox: { width: 40, height: 40, border: "1px solid #ddd", borderRadius: 12, display: "grid", placeItems: "center" },
-  tabs: { display: "flex", gap: 8, padding: "12px 16px", borderBottom: "1px solid #eee", background: "#fff" },
-  tab: { padding: "6px 10px", background: "#f3f3f3", border: "1px solid #ddd", borderRadius: 8 },
-  tabActive: { padding: "6px 10px", background: "#e5f0ff", border: "1px solid #7aa7ff", borderRadius: 8 },
+  tab: { padding: "6px 10px", background: "#f3f3f3", border: "1px solid #ddd", borderRadius: 8, textDecoration: "none", color: "#222" },
+  tabActive: { padding: "6px 10px", background: "#e5f0ff", border: "1px solid #7aa7ff", borderRadius: 8, textDecoration: "none", color: "#222" },
   main: { maxWidth: 1100, margin: "0 auto", padding: 16 },
-
-  section: { border: "1px solid #ddd", borderRadius: 12, background: "#fff" },
+  section: { border: "1px solid #ddd", borderRadius: 12, background: "#fff", marginBottom: 16 },
   sectionHead: { padding: "10px 14px", borderBottom: "1px solid #eee", background: "#f7f9ff" },
-
-  galleryGrid: {
-    padding: 12,
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
-    gap: 12,
-  },
-
+  galleryGrid: { padding: 12, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 12 },
   card: { background: "#fff", border: "1px solid #eee", borderRadius: 12, overflow: "hidden", display: "grid" },
   cardImg: { width: "100%", height: 220, objectFit: "cover", display: "block", background: "#fafafa" },
-
   pill: { fontSize: 12, border: "1px solid #ddd", borderRadius: 999, padding: "2px 8px", background: "#fff" },
-
-  waBtn: {
-    display: "inline-block",
-    textDecoration: "none",
-    border: "1px solid #25D366",
-    background: "#25D366",
-    color: "#fff",
-    padding: "6px 10px",
-    borderRadius: 8,
-    fontSize: 14,
-  },
+  waBtn: { display: "inline-block", textDecoration: "none", border: "1px solid #25D366", background: "#25D366", color: "#fff", padding: "6px 10px", borderRadius: 8, fontSize: 14 },
 };
+
+/* Router */
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Gallery />} />
+        <Route path="/admin" element={<Admin />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
