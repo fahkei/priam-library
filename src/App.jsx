@@ -32,10 +32,7 @@ function waLinkFor(book) {
   const isbn = book.isbn ? ` (ISBN: ${book.isbn})` : "";
   const msg =
     `ഹായ് PRIAM,\n` +
-    `ഈ പുസ്തകം എനിക്ക് വേണം: “${title}${author}”${isbn}.\n` +
-    `എന്റെ പേര്: ________\n` +
-    `വിലാസം: ________\n` +
-    `സൗകര്യമുള്ള സമയം: ________`;
+    `ഈ പുസ്തകം എനിക്ക് വേണം: “${title}${author}”${isbn}.\n`;
   return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`;
 }
 
@@ -121,7 +118,7 @@ function Gallery() {
                   {b.available === false && (
                     <div style={styles.badge}>In circulation</div>
                   )}
-                  <a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Take this book on WhatsApp">
+                  <a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Order this Boook">
                     <img src={b.imageURL || "/covers/placeholder.jpg"} alt={b.title} style={styles.cardImg}
                       onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")} />
                   </a>
