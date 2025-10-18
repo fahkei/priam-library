@@ -24,7 +24,7 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
  * - Admin: Login → Add Book → Manage Books (toggle available, hide/unhide, delete)
  */
 
-const WHATSAPP_NUMBER = "91XXXXXXXXXX"; // change to your number, no '+'
+const WHATSAPP_NUMBER = "917025832552"; // change to your number, no '+'
 
 function waLinkFor(book) {
   const title = book.title || "";
