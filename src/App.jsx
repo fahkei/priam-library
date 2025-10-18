@@ -89,7 +89,7 @@ function Gallery() {
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div style={styles.logoBox}>📚</div>
           <div>
-            <div style={{ fontWeight: 700 }}>പ്രിയം ലൈബ്രറി (PRIAM)</div>
+            <div style={{ fontWeight: 700 }}>പ്രിയം ലൈബ്രറി test (PRIAM)</div>
             <div style={{ fontSize: 12, color: "#555" }}>വീട്ടിലെത്തുന്ന വായന</div>
           </div>
         </div>
@@ -118,7 +118,7 @@ function Gallery() {
                   {b.available === false && (
                     <div style={styles.badge}>In circulation</div>
                   )}
-                  <a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Order this Boook">
+                  <a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Order this book">
                     <img src={b.imageURL || "/covers/placeholder.jpg"} alt={b.title} style={styles.cardImg}
                       onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")} />
                   </a>
@@ -442,81 +442,3 @@ export default function App() {
     </BrowserRouter>
   );
 }
-// ...existing code...
-<a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Order this book">
-  <img src={b.imageURL || "/covers/placeholder.jpg"} alt={b.title} style={styles.cardImg}
-    onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")} />
-</a>
-...
-<div style={{ marginTop: 10 }}>
-  <a href={waLinkFor(b)} target="_blank" rel="noreferrer" style={styles.waBtn}>
-    Order this Book
-  </a>
-</div>
-// ...existing code...// ...existing code...
-<a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Order this Book">
-  <img src={b.imageURL || "/covers/placeholder.jpg"} alt={b.title} style={styles.cardImg}
-    onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")} />
-</a>
-...
-<div style={{ marginTop: 10 }}>
-  <a href={waLinkFor(b)} target="_blank" rel="noreferrer" style={styles.waBtn}>
-    Order this Book
-  </a>
-</div>
-// ...existing code...// ...existing code...
-<a href={waLinkFor(b)} target="_blank" rel="noreferrer" title=" Order this Book">
-  <img src={b.imageURL || "/covers/placeholder.jpg"} alt={b.title} style={styles.cardImg}
-    onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")} />
-</a>
-...
-<div style={{ marginTop: 10 }}>
-  <a href={waLinkFor(b)} target="_blank" rel="noreferrer" style={styles.waBtn}>
-    Order This Book
-  </a>
-</div>
-// ...existing code...// ...existing code...
-<a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Order this Book">
-  <img src={b.imageURL || "/covers/placeholder.jpg"} alt={b.title} style={styles.cardImg}
-    onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")} />
-</a>
-...
-<div style={{ marginTop: 10 }}>
-  <a href={waLinkFor(b)} target="_blank" rel="noreferrer" style={styles.waBtn}>
-    Order this Book
-  </a>
-</div>
-// ...existing code...// ...existing code...
-<a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Order this Book">
-  <img src={b.imageURL || "/covers/placeholder.jpg"} alt={b.title} style={styles.cardImg}
-    onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")} />
-</a>
-...
-<div style={{ marginTop: 10 }}>
-  <a href={waLinkFor(b)} target="_blank" rel="noreferrer" style={styles.waBtn}>
-    Order this Book
-  </a>
-</div>
-// ...existing code...// ...existing code...
-<a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Order this Book">
-  <img src={b.imageURL || "/covers/placeholder.jpg"} alt={b.title} style={styles.cardImg}
-    onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")} />
-</a>
-...
-<div style={{ marginTop: 10 }}>
-  <a href={waLinkFor(b)} target="_blank" rel="noreferrer" style={styles.waBtn}>
-    Order this Book
-  </a>
-</div>
-// ...existing code...// ...existing code...
-<a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Order this Book">
-  <img src={b.imageURL || "/covers/placeholder.jpg"} alt={b.title} style={styles.cardImg}
-    onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")} />
-</a>
-...
-<div style={{ marginTop: 10 }}>
-  <a href={waLinkFor(b)} target="_blank" rel="noreferrer" style={styles.waBtn}>
-    Order this Book
-  </a>
-</div>
-// ...existing code...
