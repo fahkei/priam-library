@@ -29,10 +29,7 @@ function waLinkFor(book) {
   const isbn = book.isbn ? ` (ISBN: ${book.isbn})` : "";
   const msg =
     `ഹായ് PRIAM,\n` +
-    `ഈ പുസ്തകം എനിക്ക് വേണം: “${title}${author}”${isbn}.\n` +
-    `എന്റെ പേര്: ________\n` +
-    `വിലാസം: ________\n` +
-    `സൗകര്യമുള്ള സമയം: ________`;
+    `ഈ പുസ്തകം എനിക്ക് വേണം: “${title}${author}”${isbn}.\n`;
   return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`;
 }
 
