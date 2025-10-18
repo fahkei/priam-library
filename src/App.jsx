@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
-/** PRIAM — Gallery UI with WhatsApp action **/
+/** PRIAM — Gallery UI + Admin form + WhatsApp action **/
 
 // 👉 Set your WhatsApp number here (country code + number, no + or spaces)
-const WHATSAPP_NUMBER = "919746832552"; // e.g., 91 98xxxxxxx → "9198xxxxxxx"
+const WHATSAPP_NUMBER = "91XXXXXXXXXX"; // e.g., 9198xxxxxxx
 
 // LocalStorage keys
 const LS_KEYS = {
@@ -61,7 +61,6 @@ function toCSV(books) {
   ]);
   return [header.join(","), ...rows.map(r => r.join(","))].join("\n");
 }
-
 function download(filename, text, type="text/plain") {
   const blob = new Blob([text], { type });
   const url = URL.createObjectURL(blob);
@@ -71,7 +70,6 @@ function download(filename, text, type="text/plain") {
 }
 
 export default function App() {
-  // Default tab: gallery (new PDF-like view)
   const [tab, setTab] = useState("gallery");
 
   // Books live in localStorage; we load shared catalog.json on first visit
@@ -80,6 +78,7 @@ export default function App() {
   const [cat, setCat] = useState("all");
 
   const fileRef = useRef(null);
+  const jsonRef = useRef(null);
 
   // One-time fetch from /catalog.json on empty state
   useEffect(() => {
@@ -127,10 +126,14 @@ export default function App() {
     [filtered]
   );
 
+  // ---- CSV/JSON Import/Export ----
   function exportCSV() {
     download("priam_books.csv", toCSV(books), "text/csv");
   }
-
+  function exportJSON() {
+    const plain = books.map(({id, ...rest}) => rest);
+    download("catalog.json", JSON.stringify(plain, null, 2), "application/json");
+  }
   function importCSV(file) {
     if (!file) return;
     file.text().then((text) => {
@@ -159,6 +162,39 @@ export default function App() {
       alert(`Imported ${rows.length} book(s).`);
     });
   }
+  function importJSON(file) {
+    if (!file) return;
+    file.text().then((text) => {
+      try {
+        const list = JSON.parse(text);
+        if (!Array.isArray(list) || !list.length) return alert("Invalid catalog.json");
+        const rows = list.map((b) => ({
+          id: uuid(),
+          title: b.title || "",
+          author: b.author || "",
+          category: b.category || "",
+          year: b.year || "",
+          isbn: b.isbn || "",
+          image: b.image || "/covers/placeholder.jpg",
+        }));
+        setBooks(rows);
+        alert(`Loaded ${rows.length} book(s) from catalog.json`);
+      } catch {
+        alert("Invalid JSON");
+      }
+    });
+  }
+
+  // ---- Admin add book form state ----
+  const [form, setForm] = useState({
+    title: "", author: "", category: "", year: "", isbn: "", image: "/covers/placeholder.jpg"
+  });
+  function addBook() {
+    if (!form.title.trim()) return alert("Title is required");
+    setBooks(prev => [{ id: uuid(), ...form }, ...prev]);
+    setForm({ title:"", author:"", category:"", year:"", isbn:"", image:"/covers/placeholder.jpg" });
+    alert("Book added (saved to your browser). For ALL users to see it, put the image in public/covers and Export JSON → replace public/catalog.json → push.");
+  }
 
   return (
     <div style={styles.page}>
@@ -185,24 +221,33 @@ export default function App() {
             style={{ display: "none" }}
             onChange={(e) => importCSV(e.target.files?.[0])}
           />
+          <button onClick={exportJSON}>Export JSON</button>
+          <button onClick={() => jsonRef.current?.click()}>Import JSON</button>
+          <input
+            ref={jsonRef}
+            type="file"
+            accept="application/json,.json"
+            style={{ display: "none" }}
+            onChange={(e) => importJSON(e.target.files?.[0])}
+          />
         </div>
       </header>
 
       {/* Tabs */}
       <nav style={styles.tabs}>
-        {["gallery", "settings"].map((k) => (
+        {["gallery", "admin", "settings"].map((k) => (
           <button
             key={k}
             onClick={() => setTab(k)}
             style={tab === k ? styles.tabActive : styles.tab}
           >
-            {k === "gallery" ? "📖 Gallery (PDF-style)" : "Settings"}
+            {k === "gallery" ? "📖 Gallery" : k === "admin" ? "🛠️ Admin" : "Settings"}
           </button>
         ))}
       </nav>
 
       <main style={styles.main}>
-        {/* GALLERY (PDF-like with images + WhatsApp) */}
+        {/* GALLERY */}
         {tab === "gallery" && (
           <section style={{ display: "grid", gap: 16 }}>
             {/* Search + Filter */}
@@ -221,13 +266,13 @@ export default function App() {
               </select>
             </div>
 
-            {/* Big Malayalam Welcome like PDF */}
+            {/* Big Malayalam Welcome */}
             <div style={{ padding: 14, border: "1px solid #ddd", borderRadius: 12, background: "#fff" }}>
               <h1 style={{ margin: "0 0 6px 0", fontSize: 28, textAlign: "center" }}>
                 പ്രിയം ലൈബ്രറിയിലേക്ക് സ്വാഗതം!
               </h1>
               <p style={{ margin: 0, textAlign: "center", color: "#666" }}>
-                നിങ്ങളുടെ വീടിലേക്ക് പുസ്തകം എത്തിക്കും — “Take this book on WhatsApp” അമർത്തൂ
+                ചിത്രം ക്ലിക്ക് ചെയ്ത് “Take this book on WhatsApp” — നിങ്ങളുടെ വീട് വരെ ഡെലിവറി ✨
               </p>
             </div>
 
@@ -241,12 +286,14 @@ export default function App() {
                 <div style={styles.galleryGrid}>
                   {list.map((b) => (
                     <article key={b.id} style={styles.card}>
-                      <img
-                        src={b.image || "/covers/placeholder.jpg"}
-                        alt={b.title}
-                        style={styles.cardImg}
-                        onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")}
-                      />
+                      <a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Take this book on WhatsApp">
+                        <img
+                          src={b.image || "/covers/placeholder.jpg"}
+                          alt={b.title}
+                          style={styles.cardImg}
+                          onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")}
+                        />
+                      </a>
                       <div style={{ padding: "8px 10px" }}>
                         <div style={{ fontWeight: 700, marginBottom: 4 }}>{b.title}</div>
                         <div style={{ color: "#555", fontSize: 13 }}>
@@ -276,27 +323,60 @@ export default function App() {
           </section>
         )}
 
+        {/* ADMIN (add books including image URL) */}
+        {tab === "admin" && (
+          <section style={styles.card}>
+            <h3 style={{ marginTop: 0 }}>Add Book</h3>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <Field label="Title" value={form.title} onChange={(v)=>setForm({...form, title:v})}/>
+              <Field label="Author" value={form.author} onChange={(v)=>setForm({...form, author:v})}/>
+              <Field label="Category (Malayalam ok)" value={form.category} onChange={(v)=>setForm({...form, category:v})}/>
+              <Field label="Year" value={form.year} onChange={(v)=>setForm({...form, year:v})}/>
+              <Field label="ISBN" value={form.isbn} onChange={(v)=>setForm({...form, isbn:v})}/>
+              <Field label="Image URL (e.g., /covers/meesha.jpg)" value={form.image} onChange={(v)=>setForm({...form, image:v})}/>
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <img src={form.image || "/covers/placeholder.jpg"} alt="preview" style={{ width: 180, height: 220, objectFit: "cover", border:"1px solid #ddd", borderRadius: 8 }}/>
+            </div>
+            <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button onClick={addBook}>Add book</button>
+              <button onClick={exportJSON}>Export JSON (replace public/catalog.json)</button>
+            </div>
+            <p style={{ color:"#b00020", marginTop: 8 }}>
+              Note: For images to show to everyone, put files in <code>public/covers/</code> and set Image URL to <code>/covers/filename.jpg</code>, then commit & push.
+            </p>
+          </section>
+        )}
+
         {/* SETTINGS */}
         {tab === "settings" && (
           <section style={styles.card}>
             <h3 style={{ marginTop: 0 }}>Settings & Help</h3>
             <ul>
               <li>
-                Place images in <code>public/covers/</code>, and set each book’s{" "}
-                <code>image</code> to <code>/covers/filename.jpg</code>.
+                Place images in <code>public/covers/</code>, and set each book’s <code>image</code> to <code>/covers/filename.jpg</code>.
               </li>
               <li>
-                Shared catalogue file lives at <code>public/catalog.json</code>.
+                Shared catalogue file lives at <code>public/catalog.json</code>. Use <b>Export JSON</b> to generate it after adding books.
               </li>
               <li>
-                WhatsApp number (with country code) is set at the top of{" "}
-                <code>App.jsx</code> in <code>WHATSAPP_NUMBER</code>.
+                WhatsApp number (with country code) is set at the top of <code>App.jsx</code> in <code>WHATSAPP_NUMBER</code>.
               </li>
             </ul>
           </section>
         )}
       </main>
     </div>
+  );
+}
+
+/* Reusable UI */
+function Field({ label, value, onChange }) {
+  return (
+    <label style={{ display: "grid", gap: 4 }}>
+      <span style={{ fontSize: 12, color: "#333" }}>{label}</span>
+      <input value={value} onChange={e => onChange(e.target.value)} />
+    </label>
   );
 }
 
