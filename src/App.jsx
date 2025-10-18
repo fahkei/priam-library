@@ -13,15 +13,18 @@ import {
   onSnapshot,
   query,
   orderBy,
+  doc,
+  updateDoc,
+  deleteDoc,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 /** PRIAM LIBRARY APP
- * - User side (gallery with WhatsApp)
- * - Admin side (login + upload book + image)
+ * - User: gallery (hides 'hidden' books, shows 'In circulation' badge when not available)
+ * - Admin: Login → Add Book → Manage Books (toggle available, hide/unhide, delete)
  */
 
-const WHATSAPP_NUMBER = "919746832552"; // change this to your number, no '+'
+const WHATSAPP_NUMBER = "91XXXXXXXXXX"; // change to your number, no '+'
 
 function waLinkFor(book) {
   const title = book.title || "";
@@ -29,7 +32,10 @@ function waLinkFor(book) {
   const isbn = book.isbn ? ` (ISBN: ${book.isbn})` : "";
   const msg =
     `ഹായ് PRIAM,\n` +
-    `ഈ പുസ്തകം എനിക്ക് വേണം: “${title}${author}”${isbn}.\n`;
+    `ഈ പുസ്തകം എനിക്ക് വേണം: “${title}${author}”${isbn}.\n` +
+    `എന്റെ പേര്: ________\n` +
+    `വിലാസം: ________\n` +
+    `സൗകര്യമുള്ള സമയം: ________`;
   return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`;
 }
 
@@ -42,7 +48,7 @@ function groupBy(list, keyFn) {
   return out;
 }
 
-/* ---------- USER SIDE ---------- */
+/* ===================== USER SIDE ===================== */
 function Gallery() {
   const [books, setBooks] = useState([]);
   const [q, setQ] = useState("");
@@ -57,15 +63,18 @@ function Gallery() {
     return () => unsub();
   }, []);
 
+  // Hide books that are marked hidden
+  const visible = useMemo(() => books.filter(b => !b.hidden), [books]);
+
   const categories = useMemo(() => {
     const s = new Set();
-    books.forEach((b) => b.category && s.add(b.category));
+    visible.forEach((b) => b.category && s.add(b.category));
     return ["all", ...Array.from(s).sort()];
-  }, [books]);
+  }, [visible]);
 
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
-    return books.filter((b) => {
+    return visible.filter((b) => {
       const catOK =
         cat === "all" ||
         (b.category || "").toLowerCase() === cat.toLowerCase();
@@ -73,7 +82,7 @@ function Gallery() {
       const hay = `${b.title} ${b.author || ""} ${b.isbn || ""}`.toLowerCase();
       return catOK && hay.includes(t);
     });
-  }, [books, q, cat]);
+  }, [visible, q, cat]);
 
   const grouped = useMemo(() => groupBy(filtered, (b) => b.category), [filtered]);
 
@@ -108,8 +117,11 @@ function Gallery() {
             <div style={styles.sectionHead}><h2 style={{ margin: 0, fontSize: 20 }}>{section || "വിഭാഗമില്ല"}</h2></div>
             <div style={styles.galleryGrid}>
               {list.map((b) => (
-                <article key={b.id} style={styles.card}>
-                  <a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Order this book">
+                <article key={b.id} style={{ ...styles.card, position: "relative" }}>
+                  {b.available === false && (
+                    <div style={styles.badge}>In circulation</div>
+                  )}
+                  <a href={waLinkFor(b)} target="_blank" rel="noreferrer" title="Take this book on WhatsApp">
                     <img src={b.imageURL || "/covers/placeholder.jpg"} alt={b.title} style={styles.cardImg}
                       onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")} />
                   </a>
@@ -136,9 +148,10 @@ function Gallery() {
   );
 }
 
-/* ---------- ADMIN SIDE ---------- */
+/* ===================== ADMIN SIDE ===================== */
 function Admin() {
   const [user, setUser] = useState(null);
+  const [adminTab, setAdminTab] = useState("add"); // "add" | "manage"
   const nav = useNavigate();
 
   useEffect(() => {
@@ -155,15 +168,17 @@ function Admin() {
           <div style={styles.logoBox}>🛠️</div>
           <div>
             <div style={{ fontWeight: 700 }}>Admin — PRIAM</div>
-            <div style={{ fontSize: 12, color: "#555" }}>Add books + upload images</div>
+            <div style={{ fontSize: 12, color: "#555" }}>Add / Manage books</div>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button onClick={() => setAdminTab("add")}>➕ Add Book</button>
+          <button onClick={() => setAdminTab("manage")}>🗂 Manage Books</button>
           <button onClick={async () => { await signOut(auth); nav("/"); }}>Logout</button>
         </div>
       </header>
       <main style={styles.main}>
-        <AdminAddBook />
+        {adminTab === "add" ? <AdminAddBook /> : <AdminManageBooks />}
       </main>
     </div>
   );
@@ -203,6 +218,7 @@ function AdminLogin() {
   );
 }
 
+/* ---- Add Book ---- */
 function AdminAddBook() {
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
@@ -232,6 +248,8 @@ function AdminAddBook() {
         year: year.trim(),
         isbn: isbn.trim(),
         imageURL: url,
+        available: true,  // default available
+        hidden: false,    // default visible to users
         createdAt: serverTimestamp(),
       });
 
@@ -267,6 +285,119 @@ function AdminAddBook() {
   );
 }
 
+/* ---- Manage Books (toggle available, hide/unhide, delete) ---- */
+function AdminManageBooks() {
+  const [books, setBooks] = useState([]);
+  const [q, setQ] = useState("");
+
+  useEffect(() => {
+    const qRef = query(collection(db, "books"), orderBy("createdAt", "desc"));
+    const unsub = onSnapshot(qRef, (snap) => {
+      setBooks(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    });
+    return () => unsub();
+  }, []);
+
+  const filtered = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    return books.filter(b =>
+      !t || `${b.title} ${b.author || ""} ${b.isbn || ""}`.toLowerCase().includes(t)
+    );
+  }, [books, q]);
+
+  async function setAvailability(id, nextVal) {
+    try {
+      await updateDoc(doc(db, "books", id), { available: nextVal });
+    } catch (e) {
+      alert("Failed to update availability: " + (e.message || ""));
+    }
+  }
+
+  async function setHidden(id, nextVal) {
+    try {
+      await updateDoc(doc(db, "books", id), { hidden: nextVal });
+    } catch (e) {
+      alert("Failed to update visibility: " + (e.message || ""));
+    }
+  }
+
+  async function removeBook(id, title) {
+    const ok = window.confirm(`Delete “${title}” permanently? This cannot be undone.`);
+    if (!ok) return;
+    try {
+      await deleteDoc(doc(db, "books", id));
+    } catch (e) {
+      alert("Failed to delete: " + (e.message || ""));
+    }
+  }
+
+  return (
+    <section style={styles.card}>
+      <h3 style={{ marginTop: 0 }}>Manage Books</h3>
+
+      <input
+        placeholder="Search by title/author/ISBN"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        style={{ marginBottom: 10, width: "100%" }}
+      />
+
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr>
+              <th style={styles.th}>Title</th>
+              <th style={styles.th}>Author</th>
+              <th style={styles.th}>Category</th>
+              <th style={styles.th}>Status</th>
+              <th style={styles.th}>Visibility</th>
+              <th style={styles.th}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((b) => (
+              <tr key={b.id} style={{ borderTop: "1px solid #eee" }}>
+                <td style={styles.td}>{b.title}</td>
+                <td style={styles.td}>{b.author || "—"}</td>
+                <td style={styles.td}>{b.category || "—"}</td>
+                <td style={styles.td}>
+                  <label style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                    <input
+                      type="checkbox"
+                      checked={b.available !== false}
+                      onChange={(e) => setAvailability(b.id, e.target.checked)}
+                    />
+                    <span>{b.available !== false ? "Available" : "In circulation"}</span>
+                  </label>
+                </td>
+                <td style={styles.td}>
+                  <label style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                    <input
+                      type="checkbox"
+                      checked={!!b.hidden}
+                      onChange={(e) => setHidden(b.id, e.target.checked)}
+                    />
+                    <span>{b.hidden ? "Hidden from users" : "Visible to users"}</span>
+                  </label>
+                </td>
+                <td style={styles.td}>
+                  <button onClick={() => removeBook(b.id, b.title)} style={{ color: "#b00020" }}>
+                    Delete permanently
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {filtered.length === 0 && (
+              <tr><td style={styles.td} colSpan={6}>No books found.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+/* ---- Reusable Field ---- */
 function Field({ label, value, onChange }) {
   return (
     <label style={{ display: "grid", gap: 4 }}>
@@ -276,6 +407,7 @@ function Field({ label, value, onChange }) {
   );
 }
 
+/* ---- Styles ---- */
 const styles = {
   page: { fontFamily: "system-ui, Arial, sans-serif", background: "#f7f7fb", minHeight: "100vh" },
   header: { position: "sticky", top: 0, zIndex: 10, background: "#fff", borderBottom: "1px solid #ddd", padding: "12px 16px",
@@ -284,16 +416,24 @@ const styles = {
   tab: { padding: "6px 10px", background: "#f3f3f3", border: "1px solid #ddd", borderRadius: 8, textDecoration: "none", color: "#222" },
   tabActive: { padding: "6px 10px", background: "#e5f0ff", border: "1px solid #7aa7ff", borderRadius: 8, textDecoration: "none", color: "#222" },
   main: { maxWidth: 1100, margin: "0 auto", padding: 16 },
+
   section: { border: "1px solid #ddd", borderRadius: 12, background: "#fff", marginBottom: 16 },
   sectionHead: { padding: "10px 14px", borderBottom: "1px solid #eee", background: "#f7f9ff" },
+
   galleryGrid: { padding: 12, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 12 },
   card: { background: "#fff", border: "1px solid #eee", borderRadius: 12, overflow: "hidden", display: "grid" },
   cardImg: { width: "100%", height: 220, objectFit: "cover", display: "block", background: "#fafafa" },
+
   pill: { fontSize: 12, border: "1px solid #ddd", borderRadius: 999, padding: "2px 8px", background: "#fff" },
   waBtn: { display: "inline-block", textDecoration: "none", border: "1px solid #25D366", background: "#25D366", color: "#fff", padding: "6px 10px", borderRadius: 8, fontSize: 14 },
+
+  badge: { position: "absolute", top: 8, left: 8, background: "#b00020", color: "#fff", fontSize: 12, padding: "2px 8px", borderRadius: 999, boxShadow: "0 1px 2px rgba(0,0,0,0.2)" },
+
+  th: { textAlign: "left", padding: 8, background: "#f8f8f8", fontWeight: 600, borderBottom: "1px solid #eee" },
+  td: { padding: 8 },
 };
 
-/* Router */
+/* ---- Router ---- */
 export default function App() {
   return (
     <BrowserRouter>
