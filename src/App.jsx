@@ -87,7 +87,8 @@ function Gallery() {
     <div style={styles.page}>
       <header style={styles.header}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={styles.logoBox}>📚</div>
+          <img src="/ppprr.jpeg" alt="PRIAM" style={{ width: 40, height: 40, borderRadius: 12, objectFit: "cover", border: "1px solid #ddd" }} />
+
           <div>
             <div style={{ fontWeight: 700 }}>പ്രിയം ലൈബ്രറി (PRIAM)</div>
             <div style={{ fontSize: 12, color: "#555" }}>വീട്ടിലെത്തുന്ന വായന</div>
