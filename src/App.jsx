@@ -748,9 +748,12 @@ function AdminManageBooks() {
                 </td>
                 <td style={styles.td}>
                   <button onClick={() => openEdit(b)} style={{ marginRight: 8 }}>Edit</button>
-                  <button onClick={() => removeBook(b.id, b.title)} style={{ color: "#b00020" }}>
-                    Delete
-                  </button>
+                  {/* Delete disabled
+<button onClick={() => removeBook(b.id, b.title)} style={{ color: "#b00020" }}>
+  Delete
+</button>
+*/}
+
                 </td>
               </tr>
             ))}
