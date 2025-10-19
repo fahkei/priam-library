@@ -22,19 +22,26 @@ import jsPDF from "jspdf";
 import "jspdf-autotable";
 
 /** PRIAM LIBRARY APP
- * - User: gallery (hides 'hidden' books, shows 'In circulation' badge when not available)
- * - Admin: Login → Add Book (image optional) → Manage Books (edit, toggle available, hide/unhide, delete with confirm)
+ * - User: gallery (hides 'hidden', shows 'In circulation' for unavailable) + availability tabs
+ * - Admin: Login → Add Book (image optional, category dropdown) → Manage Books (edit, toggle, hide, delete)
  */
 
 const WHATSAPP_NUMBER = "917025832552"; // change to your number, no '+'
+const DEFAULT_CATEGORIES = [
+  "Novel", "Story", "Short Story", "Poetry",
+  "Biography", "History", "Religion", "Philosophy",
+  "Science", "Technology", "Education",
+  "Children", "Young Adult", "Comics",
+  "Thriller", "Mystery", "Romance",
+  "Self-help", "Health", "Travel",
+  "General"
+];
 
 function waLinkFor(book) {
   const title = book.title || "";
   const author = book.author ? ` by ${book.author}` : "";
   const isbn = book.isbn ? ` (ISBN: ${book.isbn})` : "";
-  const msg =
-    `ഹായ് PRIAM,\n` +
-    `ഈ പുസ്തകം എനിക്ക് വേണം: “${title}${author}”${isbn}.\n`;
+  const msg = `ഹായ് PRIAM,\nഈ പുസ്തകം എനിക്ക് വേണം: “${title}${author}”${isbn}.\n`;
   return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`;
 }
 
@@ -52,7 +59,11 @@ function Gallery() {
   const [books, setBooks] = useState([]);
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("all");
+  const [availTab, setAvailTab] = useState("available"); // "available" | "circulation"
   const [showBackMap, setShowBackMap] = useState({});
+
+  // crude mobile check
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
 
   useEffect(() => {
     const qRef = query(collection(db, "books"), orderBy("createdAt", "desc"));
@@ -75,19 +86,23 @@ function Gallery() {
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
     return visible.filter((b) => {
+      // category
       const catOK =
-        cat === "all" ||
-        (b.category || "").toLowerCase() === cat.toLowerCase();
-      if (!t) return catOK;
+        cat === "all" || (b.category || "").toLowerCase() === cat.toLowerCase();
+
+      // availability tab
+      const isAvail = b.available !== false;
+      const availOK =
+        availTab === "available" ? isAvail : !isAvail; // two tabs only
+
+      // search
+      if (!t) return catOK && availOK;
       const hay = `${b.title} ${b.author || ""} ${b.isbn || ""}`.toLowerCase();
-      return catOK && hay.includes(t);
+      return catOK && availOK && hay.includes(t);
     });
-  }, [visible, q, cat]);
+  }, [visible, q, cat, availTab]);
 
   const grouped = useMemo(() => groupBy(filtered, (b) => b.category), [filtered]);
-
-  // crude mobile check
-  const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
 
   function toggleFlip(id) {
     setShowBackMap((m) => ({ ...m, [id]: !m[id] }));
@@ -107,23 +122,61 @@ function Gallery() {
             <div style={{ fontSize: 12, color: "#555" }}>വീട്ടിലെത്തുന്ന വായന  📞7025832552</div>
           </div>
         </div>
-       
       </header>
 
-      <main style={styles.main}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 240px", gap: 8, marginBottom: 16 }}>
-          <input placeholder="തിരയൂ.. പേര്/എഴുത്തുകാരൻ/ISBN…" value={q} onChange={(e) => setQ(e.target.value)} />
+      <main style={{ ...styles.main, padding: isMobile ? 12 : 16, maxWidth: isMobile ? 520 : 1100 }}>
+        {/* Search + Category */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: isMobile ? "1fr" : "1fr 240px",
+            gap: 8,
+            marginBottom: 8,
+          }}
+        >
+          <input
+            placeholder="തിരയൂ.. പേര്/എഴുത്തുകാരൻ/ISBN…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
           <select value={cat} onChange={(e) => setCat(e.target.value)}>
             {categories.map((c) => (
-              <option key={c} value={c}>{c === "all" ? "All categories" : c}</option>
+              <option key={c} value={c}>
+                {c === "all" ? "All categories" : c}
+              </option>
             ))}
           </select>
         </div>
 
+        {/* Availability Tabs */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <button
+            onClick={() => setAvailTab("available")}
+            style={availTab === "available" ? styles.tabActive : styles.tab}
+          >
+            Available now
+          </button>
+          <button
+            onClick={() => setAvailTab("circulation")}
+            style={availTab === "circulation" ? styles.tabActive : styles.tab}
+          >
+            In circulation
+          </button>
+        </div>
+
         {Object.entries(grouped).map(([section, list]) => (
           <section key={section} style={styles.section}>
-            <div style={styles.sectionHead}><h2 style={{ margin: 0, fontSize: 20 }}>{section || "വിഭാഗമില്ല"}</h2></div>
-            <div style={styles.galleryGrid}>
+            <div style={styles.sectionHead}>
+              <h2 style={{ margin: 0, fontSize: 18 }}>{section || "വിഭാഗമില്ല"}</h2>
+            </div>
+            <div
+              style={{
+                ...styles.galleryGrid,
+                gridTemplateColumns: isMobile
+                  ? "repeat(auto-fill, minmax(140px, 1fr))"
+                  : "repeat(auto-fill, minmax(180px, 1fr))",
+              }}
+            >
               {list.map((b) => {
                 const showBack = !!showBackMap[b.id];
                 const chosenURL = showBack ? (b.backImageURL || b.imageURL) : b.imageURL;
@@ -151,11 +204,7 @@ function Gallery() {
                     )}
 
                     {/* Flip button (front/back) */}
-                    <button
-                      title="Flip cover"
-                      onClick={() => toggleFlip(b.id)}
-                      style={styles.flipBtn}
-                    >
+                    <button title="Flip cover" onClick={() => toggleFlip(b.id)} style={styles.flipBtn}>
                       🔁
                     </button>
 
@@ -195,11 +244,16 @@ function Gallery() {
             </div>
           </section>
         ))}
-      </main>
-    </div>
-    {/* subtle admin button */}
-<Link to="/admin" style={styles.adminFab} title="Admin">🔒</Link>
 
+        {/* Footer with phone */}
+        <footer style={{ marginTop: 24, textAlign: "center", fontSize: 14, color: "#444" }}>
+          Know more: <a href="tel:9746832552" style={{ color: "#2563eb", textDecoration: "none" }}>9746832552</a>
+        </footer>
+      </main>
+
+      {/* subtle admin button (inside root div so JSX is valid) */}
+      <Link to="/admin" style={styles.adminFab} title="Admin">🔒</Link>
+    </div>
   );
 }
 
@@ -208,6 +262,8 @@ function Admin() {
   const [user, setUser] = useState(null);
   const [adminTab, setAdminTab] = useState("add"); // "add" | "manage"
   const nav = useNavigate();
+
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => setUser(u));
@@ -232,8 +288,11 @@ function Admin() {
           <button onClick={async () => { await signOut(auth); nav("/"); }}>Logout</button>
         </div>
       </header>
-      <main style={styles.main}>
+      <main style={{ ...styles.main, padding: isMobile ? 12 : 16, maxWidth: isMobile ? 560 : 1100 }}>
         {adminTab === "add" ? <AdminAddBook /> : <AdminManageBooks />}
+        <footer style={{ marginTop: 24, textAlign: "center", fontSize: 14, color: "#444" }}>
+          Know more: <a href="tel:9746832552" style={{ color: "#2563eb", textDecoration: "none" }}>9746832552</a>
+        </footer>
       </main>
     </div>
   );
@@ -244,18 +303,19 @@ function AdminLogin() {
   const [pass, setPass] = useState("");
   const [err, setErr] = useState("");
 
-  async function doLogin(e) {
-    e.preventDefault();
-    try {
-      await signInWithEmailAndPassword(auth, email.trim(), pass);
-    } catch (e) {
-      setErr(e.message || "Login failed");
-    }
-  }
-
   return (
     <div style={{ ...styles.page, display: "grid", placeItems: "center" }}>
-      <form onSubmit={doLogin} style={{ ...styles.card, width: 360 }}>
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          try {
+            await signInWithEmailAndPassword(auth, email.trim(), pass);
+          } catch (e2) {
+            setErr(e2.message || "Login failed");
+          }
+        }}
+        style={{ ...styles.card, width: 360, maxWidth: "95vw" }}
+      >
         <h3 style={{ marginTop: 0 }}>Admin Login</h3>
         <label style={{ display: "grid", gap: 4 }}>
           <span>Email</span>
@@ -273,18 +333,21 @@ function AdminLogin() {
   );
 }
 
-/* ---- Add Book (image is OPTIONAL now) ---- */
+/* ---- Add Book (image is OPTIONAL; category dropdown) ---- */
 function AdminAddBook() {
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
-  const [category, setCategory] = useState("");
+  const [categorySel, setCategorySel] = useState(DEFAULT_CATEGORIES[0]); // dropdown
+  const [customCategory, setCustomCategory] = useState("");
   const [year, setYear] = useState("");
   const [isbn, setIsbn] = useState("");
   const [file, setFile] = useState(null);           // front cover (optional)
-  const [backFile, setBackFile] = useState(null);   // back cover (optional)
+  the [backFile, setBackFile] = useState(null);   // back cover (optional)
   const [description, setDescription] = useState(""); // optional
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -292,6 +355,8 @@ function AdminAddBook() {
     setMsg(""); setBusy(true);
 
     try {
+      const finalCategory = categorySel === "custom" ? customCategory.trim() : categorySel;
+
       // upload front cover if provided
       let frontURL = "";
       if (file) {
@@ -313,7 +378,7 @@ function AdminAddBook() {
       await addDoc(collection(db, "books"), {
         title: title.trim(),
         author: author.trim(),
-        category: category.trim(),
+        category: finalCategory,
         year: year.trim(),
         isbn: isbn.trim(),
         imageURL: frontURL,        // can be empty
@@ -324,7 +389,9 @@ function AdminAddBook() {
         createdAt: serverTimestamp(),
       });
 
-      setTitle(""); setAuthor(""); setCategory(""); setYear(""); setIsbn("");
+      setTitle(""); setAuthor("");
+      setCategorySel(DEFAULT_CATEGORIES[0]); setCustomCategory("");
+      setYear(""); setIsbn("");
       setFile(null); setBackFile(null); setDescription("");
       setMsg("✅ Book added successfully");
     } catch (e) {
@@ -338,12 +405,40 @@ function AdminAddBook() {
   return (
     <form onSubmit={handleSubmit} style={styles.card}>
       <h3 style={{ marginTop: 0 }}>Add Book</h3>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+          gap: 10,
+        }}
+      >
         <Field label="Title" value={title} onChange={setTitle} />
         <Field label="Author" value={author} onChange={setAuthor} />
-        <Field label="Category" value={category} onChange={setCategory} />
+
+        {/* Category dropdown + optional custom */}
+        <label style={{ display: "grid", gap: 4 }}>
+          <span>Category</span>
+          <select value={categorySel} onChange={(e) => setCategorySel(e.target.value)}>
+            {DEFAULT_CATEGORIES.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+            <option value="custom">Custom…</option>
+          </select>
+        </label>
+        {categorySel === "custom" && (
+          <label style={{ display: "grid", gap: 4 }}>
+            <span>Custom category</span>
+            <input
+              placeholder="Type your category"
+              value={customCategory}
+              onChange={(e) => setCustomCategory(e.target.value)}
+            />
+          </label>
+        )}
+
         <Field label="Year" value={year} onChange={setYear} />
         <Field label="ISBN" value={isbn} onChange={setIsbn} />
+
         <label style={{ display: "grid", gap: 4 }}>
           <span>Front cover (optional)</span>
           <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
@@ -352,6 +447,7 @@ function AdminAddBook() {
           <span>Back cover (optional)</span>
           <input type="file" accept="image/*" onChange={(e) => setBackFile(e.target.files?.[0] || null)} />
         </label>
+
         <label style={{ gridColumn: "1 / -1", display: "grid", gap: 4 }}>
           <span>Description (optional)</span>
           <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
@@ -375,7 +471,8 @@ function AdminManageBooks() {
   // edit form local state
   const [eTitle, setETitle] = useState("");
   const [eAuthor, setEAuthor] = useState("");
-  const [eCategory, setECategory] = useState("");
+  const [eCategorySel, setECategorySel] = useState(DEFAULT_CATEGORIES[0]); // dropdown in edit
+  const [eCustomCategory, setECustomCategory] = useState("");
   const [eYear, setEYear] = useState("");
   const [eIsbn, setEIsbn] = useState("");
   const [eDesc, setEDesc] = useState("");
@@ -383,6 +480,8 @@ function AdminManageBooks() {
   const [eHidden, setEHidden] = useState(false);
   const [eFrontFile, setEFrontFile] = useState(null);
   const [eBackFile, setEBackFile] = useState(null);
+
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
 
   useEffect(() => {
     const qRef = query(collection(db, "books"), orderBy("createdAt", "desc"));
@@ -427,7 +526,17 @@ function AdminManageBooks() {
     setEditing(b);
     setETitle(b.title || "");
     setEAuthor(b.author || "");
-    setECategory(b.category || "");
+    // if the category is in defaults, select it; else go to "custom" with its text
+    if (b.category && DEFAULT_CATEGORIES.includes(b.category)) {
+      setECategorySel(b.category);
+      setECustomCategory("");
+    } else if (b.category) {
+      setECategorySel("custom");
+      setECustomCategory(b.category);
+    } else {
+      setECategorySel(DEFAULT_CATEGORIES[0]);
+      setECustomCategory("");
+    }
     setEYear(b.year || "");
     setEIsbn(b.isbn || "");
     setEDesc(b.description || "");
@@ -444,10 +553,13 @@ function AdminManageBooks() {
     if (!editing) return;
     setSaving(true);
     try {
+      const finalCategory =
+        eCategorySel === "custom" ? eCustomCategory.trim() : eCategorySel;
+
       const updates = {
         title: eTitle.trim(),
         author: eAuthor.trim(),
-        category: eCategory.trim(),
+        category: finalCategory,
         year: eYear.trim(),
         isbn: eIsbn.trim(),
         description: eDesc.trim(),
@@ -479,7 +591,7 @@ function AdminManageBooks() {
     }
   }
 
-  // ---- EXPORTS (unchanged) ----
+  // ---- EXPORTS ----
   function exportJSON() {
     const plain = books.map(({ id, ...rest }) => rest);
     const blob = new Blob([JSON.stringify(plain, null, 2)], { type: "application/json" });
@@ -650,12 +762,40 @@ function AdminManageBooks() {
       {editing && (
         <div style={{ marginTop: 16, padding: 12, border: "1px solid #e5e5e5", borderRadius: 12, background: "#fafafa" }}>
           <h4 style={{ marginTop: 0 }}>Edit: {editing.title || "Untitled"}</h4>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+              gap: 10,
+            }}
+          >
             <Field label="Title" value={eTitle} onChange={setETitle} />
             <Field label="Author" value={eAuthor} onChange={setEAuthor} />
-            <Field label="Category" value={eCategory} onChange={setECategory} />
+
+            {/* Category dropdown + optional custom */}
+            <label style={{ display: "grid", gap: 4 }}>
+              <span>Category</span>
+              <select value={eCategorySel} onChange={(e) => setECategorySel(e.target.value)}>
+                {DEFAULT_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+                <option value="custom">Custom…</option>
+              </select>
+            </label>
+            {eCategorySel === "custom" && (
+              <label style={{ display: "grid", gap: 4 }}>
+                <span>Custom category</span>
+                <input
+                  placeholder="Type your category"
+                  value={eCustomCategory}
+                  onChange={(e) => setECustomCategory(e.target.value)}
+                />
+              </label>
+            )}
+
             <Field label="Year" value={eYear} onChange={setEYear} />
             <Field label="ISBN" value={eIsbn} onChange={setEIsbn} />
+
             <label style={{ display: "grid", gap: 4 }}>
               <span>Replace front cover (optional)</span>
               <input type="file" accept="image/*" onChange={(e) => setEFrontFile(e.target.files?.[0] || null)} />
@@ -664,10 +804,12 @@ function AdminManageBooks() {
               <span>Replace back cover (optional)</span>
               <input type="file" accept="image/*" onChange={(e) => setEBackFile(e.target.files?.[0] || null)} />
             </label>
+
             <label style={{ gridColumn: "1 / -1", display: "grid", gap: 4 }}>
               <span>Description</span>
               <textarea rows={3} value={eDesc} onChange={(e) => setEDesc(e.target.value)} />
             </label>
+
             <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
               <input type="checkbox" checked={eAvail} onChange={(e) => setEAvail(e.target.checked)} />
               <span>Available</span>
@@ -678,7 +820,7 @@ function AdminManageBooks() {
             </label>
           </div>
 
-          <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+          <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button disabled={saving} onClick={saveEdit}>{saving ? "Saving…" : "Save changes"}</button>
             <button onClick={cancelEdit}>Cancel</button>
           </div>
@@ -701,17 +843,22 @@ function Field({ label, value, onChange }) {
 /* ---- Styles ---- */
 const styles = {
   page: { fontFamily: "system-ui, Arial, sans-serif", background: "#f7f7fb", minHeight: "100vh" },
-  header: { position: "sticky", top: 0, zIndex: 10, background: "#fff", borderBottom: "1px solid #ddd", padding: "12px 16px",
-            display: "flex", justifyContent: "space-between", alignItems: "center" },
+  header: {
+    position: "sticky", top: 0, zIndex: 10, background: "#fff",
+    borderBottom: "1px solid #ddd", padding: "12px 16px",
+    display: "flex", justifyContent: "space-between", alignItems: "center"
+  },
   logoBox: { width: 40, height: 40, border: "1px solid #ddd", borderRadius: 12, display: "grid", placeItems: "center" },
+
   tab: { padding: "6px 10px", background: "#f3f3f3", border: "1px solid #ddd", borderRadius: 8, textDecoration: "none", color: "#222" },
   tabActive: { padding: "6px 10px", background: "#e5f0ff", border: "1px solid #7aa7ff", borderRadius: 8, textDecoration: "none", color: "#222" },
+
   main: { maxWidth: 1100, margin: "0 auto", padding: 16 },
 
   section: { border: "1px solid #ddd", borderRadius: 12, background: "#fff", marginBottom: 16 },
   sectionHead: { padding: "10px 14px", borderBottom: "1px solid #eee", background: "#f7f9ff" },
 
-  galleryGrid: { padding: 12, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 12 },
+  galleryGrid: { padding: 12, display: "grid", gap: 12 },
 
   card: { background: "#fff", border: "1px solid #eee", borderRadius: 12, overflow: "hidden", display: "grid" },
   cardImg: { width: "100%", height: 220, objectFit: "cover", display: "block", background: "#fafafa" },
@@ -723,23 +870,24 @@ const styles = {
 
   waBtn: { display: "inline-block", textDecoration: "none", border: "1px solid #25D366", background: "#25D366", color: "#fff", padding: "6px 10px", borderRadius: 8, fontSize: 14 },
   waBtnDim: { display: "inline-block", textDecoration: "none", border: "1px solid #bbb", background: "#bbb", color: "#fff", padding: "6px 10px", borderRadius: 8, fontSize: 14, opacity: 0.95 },
-adminFab: {
-  position: "fixed",
-  right: 14,
-  bottom: 14,
-  width: 42,
-  height: 42,
-  borderRadius: 21,
-  display: "grid",
-  placeItems: "center",
-  border: "1px solid #ddd",
-  background: "#fff",
-  textDecoration: "none",
-  fontSize: 20,
-  color: "#333",
-  boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
-  opacity: 0.75,
-}
+
+  adminFab: {
+    position: "fixed",
+    right: 14,
+    bottom: 14,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    display: "grid",
+    placeItems: "center",
+    border: "1px solid #ddd",
+    background: "#fff",
+    textDecoration: "none",
+    fontSize: 20,
+    color: "#333",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
+    opacity: 0.75,
+  },
 
   badge: { position: "absolute", top: 8, left: 8, background: "#b00020", color: "#fff", fontSize: 12, padding: "2px 8px", borderRadius: 999, boxShadow: "0 1px 2px rgba(0,0,0,0.2)" },
 
