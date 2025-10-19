@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { BrowserRouter, Routes, Route, Link, Navigate, useNavigate } from "react-router-dom";
 import { auth, db, storage } from "./firebase";
 import {
@@ -22,9 +22,9 @@ import jsPDF from "jspdf";
 import "jspdf-autotable";
 
 /** PRIAM LIBRARY APP
- * - User: gallery (hides 'hidden', shows 'In circulation' for unavailable) + availability tabs
+ * - User: gallery (hides 'hidden', shows 'In circulation' badge) + availability tabs
  * - Admin: Login → Add Book (image optional, category dropdown) → Manage Books (edit, toggle, hide, delete)
- * - Splash: shows full-screen image for 4s on first load
+ * - Splash: after 2s, show a non-fullscreen overlay for 4s with “Skip” button
  */
 
 const WHATSAPP_NUMBER = "917025832552"; // change to your number, no '+'
@@ -60,7 +60,8 @@ function Gallery() {
   const [books, setBooks] = useState([]);
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("all");
-  const [availTab, setAvailTab] = useState("available"); // "available" | "circulation"
+  // Tabs: "all" | "circulation"
+  const [availTab, setAvailTab] = useState("all");
   const [showBackMap, setShowBackMap] = useState({});
 
   const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
@@ -87,8 +88,11 @@ function Gallery() {
     return visible.filter((b) => {
       const catOK =
         cat === "all" || (b.category || "").toLowerCase() === cat.toLowerCase();
+
+      // Show all when "all"; only not available when "circulation"
       const isAvail = b.available !== false;
-      const availOK = availTab === "available" ? isAvail : !isAvail;
+      const availOK = availTab === "all" ? true : !isAvail;
+
       if (!t) return catOK && availOK;
       const hay = `${b.title} ${b.author || ""} ${b.isbn || ""}`.toLowerCase();
       return catOK && availOK && hay.includes(t);
@@ -99,6 +103,14 @@ function Gallery() {
 
   function toggleFlip(id) {
     setShowBackMap((m) => ({ ...m, [id]: !m[id] }));
+  }
+
+  function moreText(b) {
+    const lines = [];
+    if (b.description) lines.push(b.description);
+    if (b.year) lines.push(`Year: ${b.year}`);
+    if (b.isbn) lines.push(`ISBN: ${b.isbn}`);
+    return lines.length ? lines.join("\n\n") : "No details yet.";
   }
 
   return (
@@ -115,6 +127,11 @@ function Gallery() {
             <div style={{ fontSize: 12, color: "#555" }}>വീട്ടിലെത്തുന്ന വായന  📞7025832552</div>
           </div>
         </div>
+
+        {/* Small Admin link on top-right */}
+        <Link to="/admin" style={styles.adminLink} title="Admin">
+          Admin
+        </Link>
       </header>
 
       <main style={{ ...styles.main, padding: isMobile ? 12 : 16, maxWidth: isMobile ? 520 : 1100 }}>
@@ -141,13 +158,13 @@ function Gallery() {
           </select>
         </div>
 
-        {/* Availability Tabs */}
+        {/* Availability Tabs: All books | In circulation */}
         <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
           <button
-            onClick={() => setAvailTab("available")}
-            style={availTab === "available" ? styles.tabActive : styles.tab}
+            onClick={() => setAvailTab("all")}
+            style={availTab === "all" ? styles.tabActive : styles.tab}
           >
-            Available now
+            All books
           </button>
           <button
             onClick={() => setAvailTab("circulation")}
@@ -182,34 +199,34 @@ function Gallery() {
                       <div style={styles.badge}>In circulation</div>
                     )}
 
+                    {/* Click image to toggle front/back */}
                     {chosenURL ? (
                       <img
                         src={chosenURL}
                         alt={b.title}
                         style={imgStyle}
+                        onClick={() => toggleFlip(b.id)}
                         onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")}
                       />
                     ) : (
-                      <div style={{ ...imgStyle, display: "grid", placeItems: "center", background: "#fafafa" }}>
+                      <div
+                        onClick={() => toggleFlip(b.id)}
+                        style={{ ...imgStyle, display: "grid", placeItems: "center", background: "#fafafa", cursor: "pointer" }}
+                        title="Flip cover"
+                      >
                         <div style={{ padding: 8, textAlign: "center", fontWeight: 700 }}>{b.title}</div>
                       </div>
                     )}
 
-                    <button title="Flip cover" onClick={() => toggleFlip(b.id)} style={styles.flipBtn}>
-                      🔁
-                    </button>
-
                     <div style={{ padding: "8px 10px" }}>
                       <div style={{ fontWeight: 700 }}>{b.title}</div>
                       <div style={{ color: "#555", fontSize: 13 }}>{b.author || ""}</div>
-                      <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        {b.year && <span style={styles.pill}>വർഷം: {b.year}</span>}
-                        {b.isbn && <span style={styles.pill}>ISBN: {b.isbn}</span>}
-                      </div>
+
+                      {/* Year & ISBN removed from here; moved to details */}
                       <div style={{ marginTop: 8 }}>
                         <small>
                           <button
-                            onClick={() => alert(b.description ? b.description : "No description yet.")}
+                            onClick={() => alert(moreText(b))}
                             style={styles.moreLink}
                           >
                             More about the book
@@ -241,9 +258,6 @@ function Gallery() {
           Know more: <a href="tel:9746832552" style={{ color: "#2563eb", textDecoration: "none" }}>9746832552</a>
         </footer>
       </main>
-
-      {/* subtle admin button */}
-      <Link to="/admin" style={styles.adminFab} title="Admin">🔒</Link>
     </div>
   );
 }
@@ -323,7 +337,7 @@ function AdminLogin() {
   );
 }
 
-/* ---- Add Book (image is OPTIONAL; category dropdown) ---- */
+/* ---- Add Book (image OPTIONAL; category dropdown) ---- */
 function AdminAddBook() {
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
@@ -342,6 +356,7 @@ function AdminAddBook() {
   async function handleSubmit(e) {
     e.preventDefault();
     if (!title.trim()) return setMsg("Title is required");
+    if (!author.trim()) return setMsg("Author is required"); // <- Author mandatory
     setMsg(""); setBusy(true);
 
     try {
@@ -367,8 +382,8 @@ function AdminAddBook() {
         title: title.trim(),
         author: author.trim(),
         category: finalCategory,
-        year: year.trim(),
-        isbn: isbn.trim(),
+        year: year.trim(),           // optional
+        isbn: isbn.trim(),           // optional
         imageURL: frontURL,
         backImageURL: backURL,
         description: description.trim(),
@@ -400,8 +415,8 @@ function AdminAddBook() {
           gap: 10,
         }}
       >
-        <Field label="Title" value={title} onChange={setTitle} />
-        <Field label="Author" value={author} onChange={setAuthor} />
+        <Field label="Title *" value={title} onChange={setTitle} />
+        <Field label="Author *" value={author} onChange={setAuthor} />
 
         <label style={{ display: "grid", gap: 4 }}>
           <span>Category</span>
@@ -423,8 +438,8 @@ function AdminAddBook() {
           </label>
         )}
 
-        <Field label="Year" value={year} onChange={setYear} />
-        <Field label="ISBN" value={isbn} onChange={setIsbn} />
+        <Field label="Year (optional)" value={year} onChange={setYear} />
+        <Field label="ISBN (optional)" value={isbn} onChange={setIsbn} />
 
         <label style={{ display: "grid", gap: 4 }}>
           <span>Front cover (optional)</span>
@@ -546,8 +561,8 @@ function AdminManageBooks() {
         title: eTitle.trim(),
         author: eAuthor.trim(),
         category: finalCategory,
-        year: eYear.trim(),
-        isbn: eIsbn.trim(),
+        year: eYear.trim(),     // optional
+        isbn: eIsbn.trim(),     // optional
         description: eDesc.trim(),
         available: eAvail,
         hidden: eHidden,
@@ -712,7 +727,7 @@ function AdminManageBooks() {
                       checked={!!b.hidden}
                       onChange={(e) => setHidden(b.id, e.target.checked)}
                     />
-                    <span>{b.hidden ? "Hidden from users" : "Visible to users"}</span>
+                  <span>{b.hidden ? "Hidden from users" : "Visible to users"}</span>
                   </label>
                 </td>
                 <td style={styles.td}>
@@ -764,8 +779,8 @@ function AdminManageBooks() {
               </label>
             )}
 
-            <Field label="Year" value={eYear} onChange={setEYear} />
-            <Field label="ISBN" value={eIsbn} onChange={setEIsbn} />
+            <Field label="Year (optional)" value={eYear} onChange={setEYear} />
+            <Field label="ISBN (optional)" value={eIsbn} onChange={setEIsbn} />
 
             <label style={{ display: "grid", gap: 4 }}>
               <span>Replace front cover (optional)</span>
@@ -821,6 +836,16 @@ const styles = {
   },
   logoBox: { width: 40, height: 40, border: "1px solid #ddd", borderRadius: 12, display: "grid", placeItems: "center" },
 
+  adminLink: {
+    padding: "4px 10px",
+    borderRadius: 8,
+    border: "1px solid #ddd",
+    background: "#fff",
+    textDecoration: "none",
+    color: "#333",
+    fontSize: 13
+  },
+
   tab: { padding: "6px 10px", background: "#f3f3f3", border: "1px solid #ddd", borderRadius: 8, textDecoration: "none", color: "#222" },
   tabActive: { padding: "6px 10px", background: "#e5f0ff", border: "1px solid #7aa7ff", borderRadius: 8, textDecoration: "none", color: "#222" },
 
@@ -832,34 +857,13 @@ const styles = {
   galleryGrid: { padding: 12, display: "grid", gap: 12 },
 
   card: { background: "#fff", border: "1px solid #eee", borderRadius: 12, overflow: "hidden", display: "grid" },
-  cardImg: { width: "100%", height: 220, objectFit: "cover", display: "block", background: "#fafafa" },
-  cardImgMobile: { width: "100%", height: 220, objectFit: "contain", display: "block", background: "#fff" },
-
-  flipBtn: { position: "absolute", top: 8, right: 8, border: "1px solid #ddd", background: "#fff", borderRadius: 8, padding: "2px 6px", cursor: "pointer" },
+  cardImg: { width: "100%", height: 220, objectFit: "cover", display: "block", background: "#fafafa", cursor: "pointer" },
+  cardImgMobile: { width: "100%", height: 220, objectFit: "contain", display: "block", background: "#fff", cursor: "pointer" },
 
   pill: { fontSize: 12, border: "1px solid #ddd", borderRadius: 999, padding: "2px 8px", background: "#fff" },
 
   waBtn: { display: "inline-block", textDecoration: "none", border: "1px solid #25D366", background: "#25D366", color: "#fff", padding: "6px 10px", borderRadius: 8, fontSize: 14 },
   waBtnDim: { display: "inline-block", textDecoration: "none", border: "1px solid #bbb", background: "#bbb", color: "#fff", padding: "6px 10px", borderRadius: 8, fontSize: 14, opacity: 0.95 },
-
-  adminFab: {
-    position: "fixed",
-    right: 14,
-    bottom: 14,
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    display: "grid",
-    placeItems: "center",
-    border: "1px solid #ddd",
-    background: "#fff",
-    textDecoration: "none",
-    fontSize: 20,
-    color: "#333",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
-    opacity: 0.75,
-    zIndex: 30,
-  },
 
   badge: { position: "absolute", top: 8, left: 8, background: "#b00020", color: "#fff", fontSize: 12, padding: "2px 8px", borderRadius: 999, boxShadow: "0 1px 2px rgba(0,0,0,0.2)" },
 
@@ -868,39 +872,102 @@ const styles = {
 
   moreLink: { border: "none", background: "none", color: "#2563eb", cursor: "pointer", fontSize: 12, padding: 0, textDecoration: "underline" },
 
-  // splash overlay
-  splash: {
+  // splash overlay (NOT full-screen content box)
+  splashBackdrop: {
     position: "fixed",
     inset: 0,
-    background: "#000",
+    background: "rgba(0,0,0,0.35)",
     display: "grid",
     placeItems: "center",
     zIndex: 1000,
   },
-  splashImg: {
-    width: "100vw",
-    height: "100vh",
+  splashCard: {
+    background: "#ffffff",
+    borderRadius: 16,
+    border: "1px solid #e5e5e5",
+    width: "min(90vw, 800px)",
+    boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
+    overflow: "hidden",
+    position: "relative",
+  },
+  splashHeader: {
+    padding: "8px 12px",
+    borderBottom: "1px solid #f0f0f0",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    background: "#fafafa"
+  },
+  splashBody: {
+    padding: 0,
+  },
+  splashImgContained: {
+    width: "100%",
+    height: "60vh",
+    maxHeight: 520,
     objectFit: "cover",
+    display: "block",
+    background: "#000",
+  },
+  splashSkip: {
+    border: "1px solid #ddd",
+    background: "#fff",
+    borderRadius: 8,
+    padding: "4px 10px",
+    cursor: "pointer",
+    fontSize: 13
   },
 };
 
 /* ---- Router + Splash ---- */
 export default function App() {
-  const [showSplash, setShowSplash] = useState(true);
+  // Splash logic: start hidden, show after 2s, auto-hide after 4s (or on Skip)
+  const [showSplash, setShowSplash] = useState(false);
+  const showTimerRef = useRef(null);
+  const hideTimerRef = useRef(null);
 
   useEffect(() => {
-    const t = setTimeout(() => setShowSplash(false), 4000); // 4 seconds
-    return () => clearTimeout(t);
+    // After 2 seconds, show
+    showTimerRef.current = setTimeout(() => {
+      setShowSplash(true);
+      // After 4 seconds of being shown, hide
+      hideTimerRef.current = setTimeout(() => {
+        setShowSplash(false);
+      }, 4000);
+    }, 2000);
+
+    return () => {
+      if (showTimerRef.current) clearTimeout(showTimerRef.current);
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    };
   }, []);
+
+  const skipSplash = () => {
+    setShowSplash(false);
+    if (showTimerRef.current) clearTimeout(showTimerRef.current);
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+  };
 
   return (
     <BrowserRouter>
-      {/* Splash overlay (covers all routes) */}
+      {/* Non-fullscreen splash overlay (appears after 2s, lasts 4s, skippable) */}
       {showSplash && (
-        <div style={styles.splash}>
-          {/* change to /flash.png or /flash.webp if your file has a different extension */}
-          <img src="/flash.jpeg" alt="PRIAM" style={styles.splashImg}
-               onError={(e)=>{ e.currentTarget.src="/flash.png"; }} />
+        <div style={styles.splashBackdrop}>
+          <div style={styles.splashCard}>
+            <div style={styles.splashHeader}>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>PRIAM</div>
+              <button onClick={skipSplash} style={styles.splashSkip} title="Close">Skip ✕</button>
+            </div>
+            <div style={styles.splashBody}>
+              {/* change to /flash.png or /flash.webp if your file has a different extension */}
+              <img
+                src="/flash.jpeg"
+                alt="PRIAM"
+                style={styles.splashImgContained}
+                onError={(e)=>{ e.currentTarget.src="/flash.png"; }}
+              />
+            </div>
+          </div>
         </div>
       )}
 
