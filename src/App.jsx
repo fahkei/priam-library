@@ -104,7 +104,7 @@ function Gallery() {
           />
           <div>
             <div style={{ fontWeight: 700 }}>പ്രിയം ലൈബ്രറി (PRIAM)</div>
-            <div style={{ fontSize: 12, color: "#555" }}>വീട്ടിലെത്തുന്ന വായന 📞7025832552</div>
+            <div style={{ fontSize: 12, color: "#555" }}>വീട്ടിലെത്തുന്ന വായന  📞7025832552</div>
           </div>
         </div>
        
