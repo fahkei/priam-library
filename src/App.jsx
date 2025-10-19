@@ -24,6 +24,7 @@ import "jspdf-autotable";
 /** PRIAM LIBRARY APP
  * - User: gallery (hides 'hidden', shows 'In circulation' for unavailable) + availability tabs
  * - Admin: Login → Add Book (image optional, category dropdown) → Manage Books (edit, toggle, hide, delete)
+ * - Splash: shows full-screen image for 4s on first load
  */
 
 const WHATSAPP_NUMBER = "917025832552"; // change to your number, no '+'
@@ -62,7 +63,6 @@ function Gallery() {
   const [availTab, setAvailTab] = useState("available"); // "available" | "circulation"
   const [showBackMap, setShowBackMap] = useState({});
 
-  // crude mobile check
   const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
 
   useEffect(() => {
@@ -74,7 +74,6 @@ function Gallery() {
     return () => unsub();
   }, []);
 
-  // Hide books that are marked hidden
   const visible = useMemo(() => books.filter((b) => !b.hidden), [books]);
 
   const categories = useMemo(() => {
@@ -86,16 +85,10 @@ function Gallery() {
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
     return visible.filter((b) => {
-      // category
       const catOK =
         cat === "all" || (b.category || "").toLowerCase() === cat.toLowerCase();
-
-      // availability tab
       const isAvail = b.available !== false;
-      const availOK =
-        availTab === "available" ? isAvail : !isAvail; // two tabs only
-
-      // search
+      const availOK = availTab === "available" ? isAvail : !isAvail;
       if (!t) return catOK && availOK;
       const hay = `${b.title} ${b.author || ""} ${b.isbn || ""}`.toLowerCase();
       return catOK && availOK && hay.includes(t);
@@ -189,7 +182,6 @@ function Gallery() {
                       <div style={styles.badge}>In circulation</div>
                     )}
 
-                    {/* Image or Title Placeholder */}
                     {chosenURL ? (
                       <img
                         src={chosenURL}
@@ -203,7 +195,6 @@ function Gallery() {
                       </div>
                     )}
 
-                    {/* Flip button (front/back) */}
                     <button title="Flip cover" onClick={() => toggleFlip(b.id)} style={styles.flipBtn}>
                       🔁
                     </button>
@@ -251,7 +242,7 @@ function Gallery() {
         </footer>
       </main>
 
-      {/* subtle admin button (inside root div so JSX is valid) */}
+      {/* subtle admin button */}
       <Link to="/admin" style={styles.adminFab} title="Admin">🔒</Link>
     </div>
   );
@@ -262,7 +253,6 @@ function Admin() {
   const [user, setUser] = useState(null);
   const [adminTab, setAdminTab] = useState("add"); // "add" | "manage"
   const nav = useNavigate();
-
   const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
 
   useEffect(() => {
@@ -337,12 +327,12 @@ function AdminLogin() {
 function AdminAddBook() {
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
-  const [categorySel, setCategorySel] = useState(DEFAULT_CATEGORIES[0]); // dropdown
+  const [categorySel, setCategorySel] = useState(DEFAULT_CATEGORIES[0]);
   const [customCategory, setCustomCategory] = useState("");
   const [year, setYear] = useState("");
   const [isbn, setIsbn] = useState("");
-  const [file, setFile] = useState(null);           // front cover (optional)
-  the [backFile, setBackFile] = useState(null);   // back cover (optional)
+  const [file, setFile] = useState(null);         // front cover (optional)
+  const [backFile, setBackFile] = useState(null); // back cover (optional)
   const [description, setDescription] = useState(""); // optional
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -357,7 +347,6 @@ function AdminAddBook() {
     try {
       const finalCategory = categorySel === "custom" ? customCategory.trim() : categorySel;
 
-      // upload front cover if provided
       let frontURL = "";
       if (file) {
         const frontName = `${Date.now()}_${file.name}`;
@@ -366,7 +355,6 @@ function AdminAddBook() {
         frontURL = await getDownloadURL(frontRef);
       }
 
-      // upload back cover if provided
       let backURL = "";
       if (backFile) {
         const backName = `${Date.now()}_back_${backFile.name}`;
@@ -381,11 +369,11 @@ function AdminAddBook() {
         category: finalCategory,
         year: year.trim(),
         isbn: isbn.trim(),
-        imageURL: frontURL,        // can be empty
-        backImageURL: backURL,     // can be empty
+        imageURL: frontURL,
+        backImageURL: backURL,
         description: description.trim(),
-        available: true,           // default available
-        hidden: false,             // default visible to users
+        available: true,
+        hidden: false,
         createdAt: serverTimestamp(),
       });
 
@@ -415,7 +403,6 @@ function AdminAddBook() {
         <Field label="Title" value={title} onChange={setTitle} />
         <Field label="Author" value={author} onChange={setAuthor} />
 
-        {/* Category dropdown + optional custom */}
         <label style={{ display: "grid", gap: 4 }}>
           <span>Category</span>
           <select value={categorySel} onChange={(e) => setCategorySel(e.target.value)}>
@@ -465,13 +452,13 @@ function AdminAddBook() {
 function AdminManageBooks() {
   const [books, setBooks] = useState([]);
   const [q, setQ] = useState("");
-  const [editing, setEditing] = useState(null); // holds the book object being edited
+  const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
 
   // edit form local state
   const [eTitle, setETitle] = useState("");
   const [eAuthor, setEAuthor] = useState("");
-  const [eCategorySel, setECategorySel] = useState(DEFAULT_CATEGORIES[0]); // dropdown in edit
+  const [eCategorySel, setECategorySel] = useState(DEFAULT_CATEGORIES[0]);
   const [eCustomCategory, setECustomCategory] = useState("");
   const [eYear, setEYear] = useState("");
   const [eIsbn, setEIsbn] = useState("");
@@ -526,7 +513,6 @@ function AdminManageBooks() {
     setEditing(b);
     setETitle(b.title || "");
     setEAuthor(b.author || "");
-    // if the category is in defaults, select it; else go to "custom" with its text
     if (b.category && DEFAULT_CATEGORIES.includes(b.category)) {
       setECategorySel(b.category);
       setECustomCategory("");
@@ -567,14 +553,12 @@ function AdminManageBooks() {
         hidden: eHidden,
       };
 
-      // upload new front cover if chosen
       if (eFrontFile) {
         const name = `${Date.now()}_${eFrontFile.name}`;
         const r = ref(storage, `covers/${name}`);
         await uploadBytes(r, eFrontFile);
         updates.imageURL = await getDownloadURL(r);
       }
-      // upload new back cover if chosen
       if (eBackFile) {
         const name = `${Date.now()}_back_${eBackFile.name}`;
         const r = ref(storage, `covers/${name}`);
@@ -643,7 +627,7 @@ function AdminManageBooks() {
             ctx.drawImage(img, 0, 0);
             const data = canvas.toDataURL("image/png");
             resolve(data);
-          } catch (e) {
+          } catch {
             resolve(null);
           }
         };
@@ -659,12 +643,8 @@ function AdminManageBooks() {
     for (const b of books) {
       const url = b.imageURL || "/covers/placeholder.jpg";
       const dataURL = await imgUrlToDataURL(url);
-      if (dataURL) {
-        pdf.addImage(dataURL, "PNG", x, y, imgW, imgH);
-      } else {
-        pdf.setFillColor(240);
-        pdf.rect(x, y, imgW, imgH, "F");
-      }
+      if (dataURL) pdf.addImage(dataURL, "PNG", x, y, imgW, imgH);
+      else { pdf.setFillColor(240); pdf.rect(x, y, imgW, imgH, "F"); }
       pdf.setFontSize(9);
       const title = b.title || "Untitled";
       const author = b.author ? `by ${b.author}` : "";
@@ -673,17 +653,9 @@ function AdminManageBooks() {
       if (author) pdf.text(author, x, y + imgH + 24, { maxWidth: imgW });
       if (status) pdf.text(status, x, y + imgH + 36, { maxWidth: imgW });
       col++;
-      if (col >= cols) {
-        col = 0;
-        x = x0;
-        y += imgH + 60;
-        if (y > pageH - 100) {
-          pdf.addPage();
-          y = y0;
-        }
-      } else {
-        x += imgW + gap;
-      }
+      if (col >= cols) { col = 0; x = x0; y += imgH + 60;
+        if (y > pageH - 100) { pdf.addPage(); y = y0; } }
+      else { x += imgW + gap; }
     }
     pdf.save("priam_books_with_images.pdf");
   }
@@ -772,7 +744,6 @@ function AdminManageBooks() {
             <Field label="Title" value={eTitle} onChange={setETitle} />
             <Field label="Author" value={eAuthor} onChange={setEAuthor} />
 
-            {/* Category dropdown + optional custom */}
             <label style={{ display: "grid", gap: 4 }}>
               <span>Category</span>
               <select value={eCategorySel} onChange={(e) => setECategorySel(e.target.value)}>
@@ -887,6 +858,7 @@ const styles = {
     color: "#333",
     boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
     opacity: 0.75,
+    zIndex: 30,
   },
 
   badge: { position: "absolute", top: 8, left: 8, background: "#b00020", color: "#fff", fontSize: 12, padding: "2px 8px", borderRadius: 999, boxShadow: "0 1px 2px rgba(0,0,0,0.2)" },
@@ -895,12 +867,43 @@ const styles = {
   td: { padding: 8 },
 
   moreLink: { border: "none", background: "none", color: "#2563eb", cursor: "pointer", fontSize: 12, padding: 0, textDecoration: "underline" },
+
+  // splash overlay
+  splash: {
+    position: "fixed",
+    inset: 0,
+    background: "#000",
+    display: "grid",
+    placeItems: "center",
+    zIndex: 1000,
+  },
+  splashImg: {
+    width: "100vw",
+    height: "100vh",
+    objectFit: "cover",
+  },
 };
 
-/* ---- Router ---- */
+/* ---- Router + Splash ---- */
 export default function App() {
+  const [showSplash, setShowSplash] = useState(true);
+
+  useEffect(() => {
+    const t = setTimeout(() => setShowSplash(false), 4000); // 4 seconds
+    return () => clearTimeout(t);
+  }, []);
+
   return (
     <BrowserRouter>
+      {/* Splash overlay (covers all routes) */}
+      {showSplash && (
+        <div style={styles.splash}>
+          {/* change to /flash.png or /flash.webp if your file has a different extension */}
+          <img src="/flash.jpg" alt="PRIAM" style={styles.splashImg}
+               onError={(e)=>{ e.currentTarget.src="/flash.png"; }} />
+        </div>
+      )}
+
       <Routes>
         <Route path="/" element={<Gallery />} />
         <Route path="/admin" element={<Admin />} />
