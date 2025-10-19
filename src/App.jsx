@@ -115,7 +115,7 @@ function Gallery() {
 
       <main style={styles.main}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 240px", gap: 8, marginBottom: 16 }}>
-          <input placeholder="പുസ്തകം തിരയൂ.. ബുക്കിന്റെ പേര്/എഴുത്തുകാരൻ//ISBN…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input placeholder="പുസ്തകം തിരയൂ.. ബുക്കിന്റെ പേര്/എഴുത്തുകാരൻ/ISBN…" value={q} onChange={(e) => setQ(e.target.value)} />
           <select value={cat} onChange={(e) => setCat(e.target.value)}>
             {categories.map((c) => (
               <option key={c} value={c}>{c === "all" ? "All categories" : c}</option>
