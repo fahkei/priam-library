@@ -45,6 +45,10 @@ function waLinkFor(book) {
   const msg = `ഹായ് PRIAM,\nഈ പുസ്തകം എനിക്ക് വേണം: “${title}${author}”${isbn}.\n`;
   return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`;
 }
+function waHelloLink() {
+  const msg = "Hi PRIAM";
+  return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`;
+}
 
 function groupBy(list, keyFn) {
   const out = {};
