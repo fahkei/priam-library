@@ -124,7 +124,19 @@ function Gallery() {
           />
           <div>
             <div style={{ fontWeight: 700 }}>പ്രിയം ലൈബ്രറി (PRIAM)</div>
-            <div style={{ fontSize: 12, color: "#555" }}>വീട്ടിലെത്തുന്ന വായന  📞7025832552</div>
+            <div style={{ fontSize: 12, color: "#555" }}>
+  വീട്ടിലെത്തുന്ന വായന&nbsp;
+  <a
+    href={waHelloLink()}
+    target="_blank"
+    rel="noreferrer"
+    title="WhatsApp PRIAM"
+    style={{ color: "#25D366", textDecoration: "none", fontWeight: 600 }}
+  >
+    📞 7025832552
+  </a>
+</div>
+
           </div>
         </div>
 
@@ -950,13 +962,13 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      {/* Non-fullscreen splash overlay (appears after 2s, lasts 4s, skippable) */}
+      {/* Non-fullscreen splash overlay (appears after 2s, lasts 5s, skippable) */}
       {showSplash && (
         <div style={styles.splashBackdrop}>
           <div style={styles.splashCard}>
             <div style={styles.splashHeader}>
-              <div style={{ fontWeight: 600, fontSize: 14 }}>PRIAM</div>
-              <button onClick={skipSplash} style={styles.splashSkip} title="Close">Skip ✕</button>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>Welcome to PRIAM</div>
+              <button onClick={skipSplash} style={styles.splashSkip} title="Close">✕</button>
             </div>
             <div style={styles.splashBody}>
               {/* change to /flash.png or /flash.webp if your file has a different extension */}
