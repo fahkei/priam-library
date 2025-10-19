@@ -107,10 +107,7 @@ function Gallery() {
             <div style={{ fontSize: 12, color: "#555" }}>വീട്ടിലെത്തുന്ന വായന 📞7025832552</div>
           </div>
         </div>
-        <nav style={{ display: "flex", gap: 8 }}>
-          <Link to="/" style={styles.tabActive}>User</Link>
-          <Link to="/admin" style={styles.tab}>Admin</Link>
-        </nav>
+       
       </header>
 
       <main style={styles.main}>
@@ -200,6 +197,9 @@ function Gallery() {
         ))}
       </main>
     </div>
+    {/* subtle admin button */}
+<Link to="/admin" style={styles.adminFab} title="Admin">🔒</Link>
+
   );
 }
 
@@ -723,6 +723,23 @@ const styles = {
 
   waBtn: { display: "inline-block", textDecoration: "none", border: "1px solid #25D366", background: "#25D366", color: "#fff", padding: "6px 10px", borderRadius: 8, fontSize: 14 },
   waBtnDim: { display: "inline-block", textDecoration: "none", border: "1px solid #bbb", background: "#bbb", color: "#fff", padding: "6px 10px", borderRadius: 8, fontSize: 14, opacity: 0.95 },
+adminFab: {
+  position: "fixed",
+  right: 14,
+  bottom: 14,
+  width: 42,
+  height: 42,
+  borderRadius: 21,
+  display: "grid",
+  placeItems: "center",
+  border: "1px solid #ddd",
+  background: "#fff",
+  textDecoration: "none",
+  fontSize: 20,
+  color: "#333",
+  boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
+  opacity: 0.75,
+}
 
   badge: { position: "absolute", top: 8, left: 8, background: "#b00020", color: "#fff", fontSize: 12, padding: "2px 8px", borderRadius: 999, boxShadow: "0 1px 2px rgba(0,0,0,0.2)" },
 
