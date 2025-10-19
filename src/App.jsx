@@ -899,7 +899,7 @@ export default function App() {
       {showSplash && (
         <div style={styles.splash}>
           {/* change to /flash.png or /flash.webp if your file has a different extension */}
-          <img src="/flash.jpg" alt="PRIAM" style={styles.splashImg}
+          <img src="/flash.jpeg" alt="PRIAM" style={styles.splashImg}
                onError={(e)=>{ e.currentTarget.src="/flash.png"; }} />
         </div>
       )}
