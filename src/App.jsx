@@ -25,7 +25,7 @@ import "jspdf-autotable";
  * - User: gallery (hides 'hidden', shows 'In circulation' badge) + availability tabs
  * - Admin: Login → Add Book (image optional, category dropdown) → Manage Books (edit, toggle, hide, delete)
  * - Splash: after 2s, show a non-fullscreen overlay for 4s with “Skip” button
- * - Book Preview Modal: bigger image, Next view (front/back), Order button
+ * - Book Preview Modal: big image on top, details below; Prev/Next; keyboard nav (←/→, F/Space, Esc)
  */
 
 const WHATSAPP_NUMBER = "917025832552"; // change to your number, no '+'
@@ -72,6 +72,7 @@ function Gallery() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalBookId, setModalBookId] = useState(null);
   const [modalShowBack, setModalShowBack] = useState(false);
+  const [modalIndex, setModalIndex] = useState(-1); // index in filtered list
 
   const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
 
@@ -83,15 +84,6 @@ function Gallery() {
     });
     return () => unsub();
   }, []);
-
-  // Close on ESC
-  useEffect(() => {
-    function onKey(e) {
-      if (e.key === "Escape") closeModal();
-    }
-    if (modalOpen) document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [modalOpen]);
 
   const visible = useMemo(() => books.filter((b) => !b.hidden), [books]);
 
@@ -128,6 +120,8 @@ function Gallery() {
   }
 
   function openModal(b) {
+    const idx = filtered.findIndex((x) => x.id === b.id);
+    setModalIndex(idx);
     setModalBookId(b.id);
     setModalShowBack(false);
     setModalOpen(true);
@@ -136,15 +130,52 @@ function Gallery() {
     setModalOpen(false);
     setModalBookId(null);
     setModalShowBack(false);
+    setModalIndex(-1);
   }
   function toggleView() {
-    const b = books.find((x) => x.id === modalBookId);
+    const b = filtered[modalIndex];
     if (!b) return;
-    // Only allow toggle if back image exists
     if (b.backImageURL) setModalShowBack((v) => !v);
   }
+  function goPrev() {
+    if (!filtered.length) return;
+    const next = (modalIndex - 1 + filtered.length) % filtered.length;
+    setModalIndex(next);
+    setModalBookId(filtered[next].id);
+    setModalShowBack(false);
+  }
+  function goNext() {
+    if (!filtered.length) return;
+    const next = (modalIndex + 1) % filtered.length;
+    setModalIndex(next);
+    setModalBookId(filtered[next].id);
+    setModalShowBack(false);
+  }
 
-  const modalBook = modalBookId ? books.find((x) => x.id === modalBookId) : null;
+  // Keyboard controls (when modal is open)
+  useEffect(() => {
+    function onKey(e) {
+      if (!modalOpen) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeModal();
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        goPrev();
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        goNext();
+      } else if (e.key.toLowerCase() === "f" || e.code === "Space") {
+        e.preventDefault();
+        toggleView();
+      }
+    }
+    if (modalOpen) document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modalOpen, modalIndex, filtered]);
+
+  const modalBook = modalIndex >= 0 ? filtered[modalIndex] : null;
   const modalImgURL =
     modalBook && modalShowBack && modalBook.backImageURL
       ? modalBook.backImageURL
@@ -309,47 +340,39 @@ function Gallery() {
         <div style={styles.modalBackdrop} onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}>
           <div style={styles.modalCard}>
             <div style={styles.modalHeader}>
-              <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
                 <div style={{ fontWeight: 700 }}>{modalBook.title || "Untitled"}</div>
                 {modalBook.author && <div style={{ fontSize: 12, color: "#666" }}>by {modalBook.author}</div>}
+                <span style={modalBook.available === false ? styles.statusPillRed : styles.statusPillGreen}>
+                  {modalBook.available === false ? "In circulation" : "Available"}
+                </span>
               </div>
               <button onClick={closeModal} style={styles.modalCloseBtn} title="Close">✕</button>
             </div>
 
-            <div style={styles.modalBody}>
-              <div style={styles.modalMediaCol}>
+            {/* IMAGE FIRST (big), details below */}
+            <div style={styles.modalBodyStack}>
+              <div style={styles.modalMediaWrap}>
                 <img
                   src={modalImgURL}
                   alt={modalBook.title}
                   style={styles.modalImg}
                   onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")}
                 />
+                {/* Overlay Prev / Next */}
+                <button onClick={goPrev} style={{ ...styles.overlayNavBtn, left: 8 }} title="Previous (←)">‹</button>
+                <button onClick={goNext} style={{ ...styles.overlayNavBtn, right: 8 }} title="Next (→)">›</button>
+
+                {/* Inline controls under image */}
                 <div style={styles.modalMediaControls}>
                   <button
                     onClick={toggleView}
                     disabled={!modalBook.backImageURL}
-                    title={modalBook.backImageURL ? "Show next view" : "No back cover uploaded"}
+                    title={modalBook.backImageURL ? "Show next view (F/Space)" : "No back cover uploaded"}
                     style={styles.modalSecondaryBtn}
                   >
                     {modalShowBack ? "Show front" : "Show back"}
                   </button>
-                </div>
-              </div>
-
-              <div style={styles.modalInfoCol}>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                  <span style={modalBook.available === false ? styles.statusPillRed : styles.statusPillGreen}>
-                    {modalBook.available === false ? "In circulation" : "Available"}
-                  </span>
-                </div>
-
-                <div style={{ marginTop: 10, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
-                  {modalBook.description ? modalBook.description : "No details yet."}
-                  {modalBook.year && <div style={{ marginTop: 8, color: "#555" }}><b>Year:</b> {modalBook.year}</div>}
-                  {modalBook.isbn && <div style={{ color: "#555" }}><b>ISBN:</b> {modalBook.isbn}</div>}
-                </div>
-
-                <div style={{ marginTop: 16, display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <a
                     href={waLinkFor(modalBook)}
                     target="_blank"
@@ -359,10 +382,21 @@ function Gallery() {
                   >
                     📦 Order on WhatsApp
                   </a>
-                  <button onClick={closeModal} style={styles.modalSecondaryBtn}>Close</button>
+                </div>
+              </div>
+
+              {/* Details BELOW the image */}
+              <div style={styles.modalInfoBelow}>
+                <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
+                  {modalBook.description ? modalBook.description : "No details yet."}
+                </div>
+                <div style={{ marginTop: 8, color: "#555", display: "grid", gap: 4 }}>
+                  {modalBook.year && <div><b>Year:</b> {modalBook.year}</div>}
+                  {modalBook.isbn && <div><b>ISBN:</b> {modalBook.isbn}</div>}
                 </div>
               </div>
             </div>
+            {/* End stack */}
           </div>
         </div>
       )}
@@ -1039,7 +1073,7 @@ const styles = {
     fontSize: 13
   },
 
-  /* ===== Book Preview Modal ===== */
+  /* ===== Book Preview Modal (stacked) ===== */
   modalBackdrop: {
     position: "fixed",
     inset: 0,
@@ -1052,7 +1086,7 @@ const styles = {
   modalCard: {
     background: "#fff",
     width: "min(96vw, 980px)",
-    maxHeight: "90vh",
+    maxHeight: "92vh",
     borderRadius: 16,
     border: "1px solid #e5e5e5",
     boxShadow: "0 16px 50px rgba(0,0,0,0.35)",
@@ -1077,35 +1111,45 @@ const styles = {
     cursor: "pointer",
     fontSize: 13
   },
-  modalBody: {
+
+  modalBodyStack: {
     display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: 12,
+    gridTemplateRows: "auto 1fr",
+    gap: 10,
     padding: 12,
+    overflow: "auto",
   },
-  modalMediaCol: {
+  modalMediaWrap: {
+    position: "relative",
     display: "grid",
     gridTemplateRows: "1fr auto",
     gap: 8,
-    minHeight: 0,
   },
   modalImg: {
     width: "100%",
     height: "60vh",
-    maxHeight: 520,
+    maxHeight: 560,
     objectFit: "contain",
     background: "#000",
     borderRadius: 12,
+  },
+  overlayNavBtn: {
+    position: "absolute",
+    top: "50%",
+    transform: "translateY(-50%)",
+    border: "1px solid #ddd",
+    background: "rgba(255,255,255,0.9)",
+    borderRadius: 12,
+    padding: "6px 10px",
+    cursor: "pointer",
+    fontSize: 22,
+    lineHeight: 1,
+    userSelect: "none",
   },
   modalMediaControls: {
     display: "flex",
     gap: 8,
     justifyContent: "flex-start",
-  },
-  modalInfoCol: {
-    minHeight: 0,
-    overflowY: "auto",
-    paddingRight: 4,
   },
   modalSecondaryBtn: {
     border: "1px solid #ddd",
@@ -1115,6 +1159,11 @@ const styles = {
     cursor: "pointer",
     fontSize: 14
   },
+  modalInfoBelow: {
+    padding: "4px 2px 8px",
+    color: "#222",
+  },
+
   statusPillGreen: {
     display: "inline-block",
     background: "#e8fff0",
