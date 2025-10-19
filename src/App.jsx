@@ -23,7 +23,7 @@ import "jspdf-autotable";
 
 /** PRIAM LIBRARY APP
  * - User: gallery (hides 'hidden' books, shows 'In circulation' badge when not available)
- * - Admin: Login → Add Book → Manage Books (toggle available, hide/unhide, delete)
+ * - Admin: Login → Add Book (image optional) → Manage Books (edit, toggle available, hide/unhide, delete with confirm)
  */
 
 const WHATSAPP_NUMBER = "917025832552"; // change to your number, no '+'
@@ -64,7 +64,7 @@ function Gallery() {
   }, []);
 
   // Hide books that are marked hidden
-  const visible = useMemo(() => books.filter(b => !b.hidden), [books]);
+  const visible = useMemo(() => books.filter((b) => !b.hidden), [books]);
 
   const categories = useMemo(() => {
     const s = new Set();
@@ -86,7 +86,7 @@ function Gallery() {
 
   const grouped = useMemo(() => groupBy(filtered, (b) => b.category), [filtered]);
 
-  // crude mobile check (good enough for Vite SPA)
+  // crude mobile check
   const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
 
   function toggleFlip(id) {
@@ -97,11 +97,14 @@ function Gallery() {
     <div style={styles.page}>
       <header style={styles.header}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <img src="/ppprr.jpeg" alt="PRIAM" style={{ width: 40, height: 40, borderRadius: 12, objectFit: "cover", border: "1px solid #ddd" }} />
-
+          <img
+            src="/ppprr.jpeg"
+            alt="PRIAM"
+            style={{ width: 40, height: 40, borderRadius: 12, objectFit: "cover", border: "1px solid #ddd" }}
+          />
           <div>
             <div style={{ fontWeight: 700 }}>പ്രിയം ലൈബ്രറി (PRIAM)</div>
-            <div style={{ fontSize: 12, color: "#555" }}>വീട്ടിലെത്തുന്ന വായന</div>
+            <div style={{ fontSize: 12, color: "#555" }}>വീട്ടിലെത്തുന്ന വായന 📞7025832552</div>
           </div>
         </div>
         <nav style={{ display: "flex", gap: 8 }}>
@@ -270,31 +273,33 @@ function AdminLogin() {
   );
 }
 
-/* ---- Add Book ---- */
+/* ---- Add Book (image is OPTIONAL now) ---- */
 function AdminAddBook() {
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
   const [category, setCategory] = useState("");
   const [year, setYear] = useState("");
   const [isbn, setIsbn] = useState("");
-  const [file, setFile] = useState(null);           // front cover
+  const [file, setFile] = useState(null);           // front cover (optional)
   const [backFile, setBackFile] = useState(null);   // back cover (optional)
-  const [description, setDescription] = useState(""); // description (optional)
+  const [description, setDescription] = useState(""); // optional
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
   async function handleSubmit(e) {
     e.preventDefault();
     if (!title.trim()) return setMsg("Title is required");
-    if (!file) return setMsg("Please choose a front cover image");
     setMsg(""); setBusy(true);
 
     try {
-      // upload front cover
-      const frontName = `${Date.now()}_${file.name}`;
-      const frontRef = ref(storage, `covers/${frontName}`);
-      await uploadBytes(frontRef, file);
-      const frontURL = await getDownloadURL(frontRef);
+      // upload front cover if provided
+      let frontURL = "";
+      if (file) {
+        const frontName = `${Date.now()}_${file.name}`;
+        const frontRef = ref(storage, `covers/${frontName}`);
+        await uploadBytes(frontRef, file);
+        frontURL = await getDownloadURL(frontRef);
+      }
 
       // upload back cover if provided
       let backURL = "";
@@ -311,11 +316,11 @@ function AdminAddBook() {
         category: category.trim(),
         year: year.trim(),
         isbn: isbn.trim(),
-        imageURL: frontURL,
-        backImageURL: backURL || "",
+        imageURL: frontURL,        // can be empty
+        backImageURL: backURL,     // can be empty
         description: description.trim(),
-        available: true,  // default available
-        hidden: false,    // default visible to users
+        available: true,           // default available
+        hidden: false,             // default visible to users
         createdAt: serverTimestamp(),
       });
 
@@ -340,7 +345,7 @@ function AdminAddBook() {
         <Field label="Year" value={year} onChange={setYear} />
         <Field label="ISBN" value={isbn} onChange={setIsbn} />
         <label style={{ display: "grid", gap: 4 }}>
-          <span>Front cover</span>
+          <span>Front cover (optional)</span>
           <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
         </label>
         <label style={{ display: "grid", gap: 4 }}>
@@ -360,10 +365,24 @@ function AdminAddBook() {
   );
 }
 
-/* ---- Manage Books (toggle available, hide/unhide, delete) ---- */
+/* ---- Manage Books (edit, toggle availability, hide/unhide, delete) ---- */
 function AdminManageBooks() {
   const [books, setBooks] = useState([]);
   const [q, setQ] = useState("");
+  const [editing, setEditing] = useState(null); // holds the book object being edited
+  const [saving, setSaving] = useState(false);
+
+  // edit form local state
+  const [eTitle, setETitle] = useState("");
+  const [eAuthor, setEAuthor] = useState("");
+  const [eCategory, setECategory] = useState("");
+  const [eYear, setEYear] = useState("");
+  const [eIsbn, setEIsbn] = useState("");
+  const [eDesc, setEDesc] = useState("");
+  const [eAvail, setEAvail] = useState(true);
+  const [eHidden, setEHidden] = useState(false);
+  const [eFrontFile, setEFrontFile] = useState(null);
+  const [eBackFile, setEBackFile] = useState(null);
 
   useEffect(() => {
     const qRef = query(collection(db, "books"), orderBy("createdAt", "desc"));
@@ -387,8 +406,80 @@ function AdminManageBooks() {
       alert("Failed to update availability: " + (e.message || ""));
     }
   }
+  async function setHidden(id, nextVal) {
+    try {
+      await updateDoc(doc(db, "books", id), { hidden: nextVal });
+    } catch (e) {
+      alert("Failed to update visibility: " + (e.message || ""));
+    }
+  }
+  async function removeBook(id, title) {
+    const ok = window.confirm(`Delete “${title}” permanently? This cannot be undone.`);
+    if (!ok) return;
+    try {
+      await deleteDoc(doc(db, "books", id));
+    } catch (e) {
+      alert("Failed to delete: " + (e.message || ""));
+    }
+  }
 
-  // ---- EXPORTS ----
+  function openEdit(b) {
+    setEditing(b);
+    setETitle(b.title || "");
+    setEAuthor(b.author || "");
+    setECategory(b.category || "");
+    setEYear(b.year || "");
+    setEIsbn(b.isbn || "");
+    setEDesc(b.description || "");
+    setEAvail(b.available !== false);
+    setEHidden(!!b.hidden);
+    setEFrontFile(null);
+    setEBackFile(null);
+  }
+  function cancelEdit() {
+    setEditing(null);
+  }
+
+  async function saveEdit() {
+    if (!editing) return;
+    setSaving(true);
+    try {
+      const updates = {
+        title: eTitle.trim(),
+        author: eAuthor.trim(),
+        category: eCategory.trim(),
+        year: eYear.trim(),
+        isbn: eIsbn.trim(),
+        description: eDesc.trim(),
+        available: eAvail,
+        hidden: eHidden,
+      };
+
+      // upload new front cover if chosen
+      if (eFrontFile) {
+        const name = `${Date.now()}_${eFrontFile.name}`;
+        const r = ref(storage, `covers/${name}`);
+        await uploadBytes(r, eFrontFile);
+        updates.imageURL = await getDownloadURL(r);
+      }
+      // upload new back cover if chosen
+      if (eBackFile) {
+        const name = `${Date.now()}_back_${eBackFile.name}`;
+        const r = ref(storage, `covers/${name}`);
+        await uploadBytes(r, eBackFile);
+        updates.backImageURL = await getDownloadURL(r);
+      }
+
+      await updateDoc(doc(db, "books", editing.id), updates);
+      setEditing(null);
+    } catch (e) {
+      alert("Failed to save: " + (e.message || ""));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // ---- EXPORTS (unchanged) ----
   function exportJSON() {
     const plain = books.map(({ id, ...rest }) => rest);
     const blob = new Blob([JSON.stringify(plain, null, 2)], { type: "application/json" });
@@ -399,7 +490,6 @@ function AdminManageBooks() {
     a.click();
     URL.revokeObjectURL(url);
   }
-
   function exportCSV() {
     const header = ["title","author","category","year","isbn","imageURL","backImageURL","description","available","hidden","createdAt"];
     const rows = books.map(b => [
@@ -424,13 +514,10 @@ function AdminManageBooks() {
     a.click();
     URL.revokeObjectURL(url);
   }
-
   async function exportPDF() {
     const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
     pdf.setFontSize(14);
     pdf.text("PRIAM Library — Books Export with Covers", 40, 40);
-
-    // Load image → draw to canvas → get dataURL (avoids fetch/CORS issues)
     function imgUrlToDataURL(url) {
       return new Promise((resolve) => {
         const img = new Image();
@@ -452,37 +539,27 @@ function AdminManageBooks() {
         img.src = url;
       });
     }
-
     const x0 = 40, y0 = 60;
     const imgW = 60, imgH = 80, gap = 14;
     const cols = 3;
     const pageH = pdf.internal.pageSize.getHeight();
-
     let col = 0, x = x0, y = y0;
-
     for (const b of books) {
       const url = b.imageURL || "/covers/placeholder.jpg";
       const dataURL = await imgUrlToDataURL(url);
-
       if (dataURL) {
         pdf.addImage(dataURL, "PNG", x, y, imgW, imgH);
       } else {
-        // fallback: draw a light gray placeholder
         pdf.setFillColor(240);
         pdf.rect(x, y, imgW, imgH, "F");
       }
-
-      // Text under image
       pdf.setFontSize(9);
       const title = b.title || "Untitled";
       const author = b.author ? `by ${b.author}` : "";
       const status = b.available === false ? "In circulation" : "";
-
       pdf.text(title, x, y + imgH + 12, { maxWidth: imgW });
       if (author) pdf.text(author, x, y + imgH + 24, { maxWidth: imgW });
       if (status) pdf.text(status, x, y + imgH + 36, { maxWidth: imgW });
-
-      // next cell
       col++;
       if (col >= cols) {
         col = 0;
@@ -496,33 +573,13 @@ function AdminManageBooks() {
         x += imgW + gap;
       }
     }
-
     pdf.save("priam_books_with_images.pdf");
-  }
-
-  async function setHidden(id, nextVal) {
-    try {
-      await updateDoc(doc(db, "books", id), { hidden: nextVal });
-    } catch (e) {
-      alert("Failed to update visibility: " + (e.message || ""));
-    }
-  }
-
-  async function removeBook(id, title) {
-    const ok = window.confirm(`Delete “${title}” permanently? This cannot be undone.`);
-    if (!ok) return;
-    try {
-      await deleteDoc(doc(db, "books", id));
-    } catch (e) {
-      alert("Failed to delete: " + (e.message || ""));
-    }
   }
 
   return (
     <section style={styles.card}>
       <h3 style={{ marginTop: 0 }}>Manage Books</h3>
 
-      {/* ---- Export Buttons ---- */}
       <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
         <button onClick={exportJSON}>Export JSON</button>
         <button onClick={exportCSV}>Export CSV</button>
@@ -575,8 +632,9 @@ function AdminManageBooks() {
                   </label>
                 </td>
                 <td style={styles.td}>
+                  <button onClick={() => openEdit(b)} style={{ marginRight: 8 }}>Edit</button>
                   <button onClick={() => removeBook(b.id, b.title)} style={{ color: "#b00020" }}>
-                    Delete permanently
+                    Delete
                   </button>
                 </td>
               </tr>
@@ -587,6 +645,45 @@ function AdminManageBooks() {
           </tbody>
         </table>
       </div>
+
+      {/* Edit Drawer */}
+      {editing && (
+        <div style={{ marginTop: 16, padding: 12, border: "1px solid #e5e5e5", borderRadius: 12, background: "#fafafa" }}>
+          <h4 style={{ marginTop: 0 }}>Edit: {editing.title || "Untitled"}</h4>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <Field label="Title" value={eTitle} onChange={setETitle} />
+            <Field label="Author" value={eAuthor} onChange={setEAuthor} />
+            <Field label="Category" value={eCategory} onChange={setECategory} />
+            <Field label="Year" value={eYear} onChange={setEYear} />
+            <Field label="ISBN" value={eIsbn} onChange={setEIsbn} />
+            <label style={{ display: "grid", gap: 4 }}>
+              <span>Replace front cover (optional)</span>
+              <input type="file" accept="image/*" onChange={(e) => setEFrontFile(e.target.files?.[0] || null)} />
+            </label>
+            <label style={{ display: "grid", gap: 4 }}>
+              <span>Replace back cover (optional)</span>
+              <input type="file" accept="image/*" onChange={(e) => setEBackFile(e.target.files?.[0] || null)} />
+            </label>
+            <label style={{ gridColumn: "1 / -1", display: "grid", gap: 4 }}>
+              <span>Description</span>
+              <textarea rows={3} value={eDesc} onChange={(e) => setEDesc(e.target.value)} />
+            </label>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <input type="checkbox" checked={eAvail} onChange={(e) => setEAvail(e.target.checked)} />
+              <span>Available</span>
+            </label>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <input type="checkbox" checked={eHidden} onChange={(e) => setEHidden(e.target.checked)} />
+              <span>Hidden from users</span>
+            </label>
+          </div>
+
+          <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+            <button disabled={saving} onClick={saveEdit}>{saving ? "Saving…" : "Save changes"}</button>
+            <button onClick={cancelEdit}>Cancel</button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -616,18 +713,14 @@ const styles = {
 
   galleryGrid: { padding: 12, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 12 },
 
-  // desktop image
   card: { background: "#fff", border: "1px solid #eee", borderRadius: 12, overflow: "hidden", display: "grid" },
   cardImg: { width: "100%", height: 220, objectFit: "cover", display: "block", background: "#fafafa" },
-
-  // mobile image: show full image (contain)
   cardImgMobile: { width: "100%", height: 220, objectFit: "contain", display: "block", background: "#fff" },
 
   flipBtn: { position: "absolute", top: 8, right: 8, border: "1px solid #ddd", background: "#fff", borderRadius: 8, padding: "2px 6px", cursor: "pointer" },
 
   pill: { fontSize: 12, border: "1px solid #ddd", borderRadius: 999, padding: "2px 8px", background: "#fff" },
 
-  // WhatsApp buttons
   waBtn: { display: "inline-block", textDecoration: "none", border: "1px solid #25D366", background: "#25D366", color: "#fff", padding: "6px 10px", borderRadius: 8, fontSize: 14 },
   waBtnDim: { display: "inline-block", textDecoration: "none", border: "1px solid #bbb", background: "#bbb", color: "#fff", padding: "6px 10px", borderRadius: 8, fontSize: 14, opacity: 0.95 },
 
