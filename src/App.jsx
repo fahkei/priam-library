@@ -129,18 +129,17 @@ function Gallery() {
           <div>
             <div style={{ fontWeight: 700 }}>പ്രിയം ലൈബ്രറി (PRIAM)</div>
             <div style={{ fontSize: 12, color: "#555" }}>
-  വീട്ടിലെത്തുന്ന വായന&nbsp;
-  <a
-    href={waHelloLink()}
-    target="_blank"
-    rel="noreferrer"
-    title="WhatsApp PRIAM"
-    style={{ color: "#25D366", textDecoration: "none", fontWeight: 600 }}
-  >
-    📞 7025832552
-  </a>
-</div>
-
+              വീട്ടിലെത്തുന്ന വായന&nbsp;
+              <a
+                href={waHelloLink()}
+                target="_blank"
+                rel="noreferrer noopener"
+                title="WhatsApp PRIAM"
+                style={{ color: "#25D366", textDecoration: "none", fontWeight: 600 }}
+              >
+                📞 7025832552
+              </a>
+            </div>
           </div>
         </div>
 
@@ -254,7 +253,7 @@ function Gallery() {
                         <a
                           href={waLinkFor(b)}
                           target="_blank"
-                          rel="noreferrer"
+                          rel="noreferrer noopener"
                           style={isAvailable ? styles.waBtn : styles.waBtnDim}
                           title={isAvailable ? "Order this book on WhatsApp" : "Order in advance on WhatsApp"}
                         >
@@ -361,6 +360,7 @@ function AdminAddBook() {
   const [customCategory, setCustomCategory] = useState("");
   const [year, setYear] = useState("");
   const [isbn, setIsbn] = useState("");
+  const [callNumber, setCallNumber] = useState(""); // NEW: optional
   const [file, setFile] = useState(null);         // front cover (optional)
   const [backFile, setBackFile] = useState(null); // back cover (optional)
   const [description, setDescription] = useState(""); // optional
@@ -400,6 +400,7 @@ function AdminAddBook() {
         category: finalCategory,
         year: year.trim(),           // optional
         isbn: isbn.trim(),           // optional
+        callNumber: callNumber.trim(), // NEW optional
         imageURL: frontURL,
         backImageURL: backURL,
         description: description.trim(),
@@ -410,7 +411,7 @@ function AdminAddBook() {
 
       setTitle(""); setAuthor("");
       setCategorySel(DEFAULT_CATEGORIES[0]); setCustomCategory("");
-      setYear(""); setIsbn("");
+      setYear(""); setIsbn(""); setCallNumber("");
       setFile(null); setBackFile(null); setDescription("");
       setMsg("✅ Book added successfully");
     } catch (e) {
@@ -456,6 +457,7 @@ function AdminAddBook() {
 
         <Field label="Year (optional)" value={year} onChange={setYear} />
         <Field label="ISBN (optional)" value={isbn} onChange={setIsbn} />
+        <Field label="Call number (optional)" value={callNumber} onChange={setCallNumber} /> {/* NEW */}
 
         <label style={{ display: "grid", gap: 4 }}>
           <span>Front cover (optional)</span>
@@ -493,6 +495,7 @@ function AdminManageBooks() {
   const [eCustomCategory, setECustomCategory] = useState("");
   const [eYear, setEYear] = useState("");
   const [eIsbn, setEIsbn] = useState("");
+  const [eCallNumber, setECallNumber] = useState(""); // NEW
   const [eDesc, setEDesc] = useState("");
   const [eAvail, setEAvail] = useState(true);
   const [eHidden, setEHidden] = useState(false);
@@ -556,6 +559,7 @@ function AdminManageBooks() {
     }
     setEYear(b.year || "");
     setEIsbn(b.isbn || "");
+    setECallNumber(b.callNumber || ""); // NEW
     setEDesc(b.description || "");
     setEAvail(b.available !== false);
     setEHidden(!!b.hidden);
@@ -579,6 +583,7 @@ function AdminManageBooks() {
         category: finalCategory,
         year: eYear.trim(),     // optional
         isbn: eIsbn.trim(),     // optional
+        callNumber: eCallNumber.trim(), // NEW optional
         description: eDesc.trim(),
         available: eAvail,
         hidden: eHidden,
@@ -618,13 +623,14 @@ function AdminManageBooks() {
     URL.revokeObjectURL(url);
   }
   function exportCSV() {
-    const header = ["title","author","category","year","isbn","imageURL","backImageURL","description","available","hidden","createdAt"];
+    const header = ["title","author","category","year","isbn","callNumber","imageURL","backImageURL","description","available","hidden","createdAt"]; // NEW callNumber
     const rows = books.map(b => [
       b.title || "",
       b.author || "",
       b.category || "",
       b.year || "",
       b.isbn || "",
+      b.callNumber || "", // NEW
       b.imageURL || "",
       b.backImageURL || "",
       (b.description || "").replace(/\r?\n/g, " "),
@@ -712,10 +718,12 @@ function AdminManageBooks() {
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
+              {/* Reordered columns: Title, Author, Availability, Call number, Category, Visibility, Actions */}
               <th style={styles.th}>Title</th>
               <th style={styles.th}>Author</th>
+              <th style={styles.th}>Availability</th>
+              <th style={styles.th}>Call number</th>
               <th style={styles.th}>Category</th>
-              <th style={styles.th}>Status</th>
               <th style={styles.th}>Visibility</th>
               <th style={styles.th}>Actions</th>
             </tr>
@@ -725,7 +733,6 @@ function AdminManageBooks() {
               <tr key={b.id} style={{ borderTop: "1px solid #eee" }}>
                 <td style={styles.td}>{b.title}</td>
                 <td style={styles.td}>{b.author || "—"}</td>
-                <td style={styles.td}>{b.category || "—"}</td>
                 <td style={styles.td}>
                   <label style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
                     <input
@@ -736,6 +743,8 @@ function AdminManageBooks() {
                     <span>{b.available !== false ? "Available" : "In circulation"}</span>
                   </label>
                 </td>
+                <td style={styles.td}>{b.callNumber || "—"}</td> {/* NEW column */}
+                <td style={styles.td}>{b.category || "—"}</td>
                 <td style={styles.td}>
                   <label style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
                     <input
@@ -743,22 +752,21 @@ function AdminManageBooks() {
                       checked={!!b.hidden}
                       onChange={(e) => setHidden(b.id, e.target.checked)}
                     />
-                  <span>{b.hidden ? "Hidden from users" : "Visible to users"}</span>
+                    <span>{b.hidden ? "Hidden from users" : "Visible to users"}</span>
                   </label>
                 </td>
                 <td style={styles.td}>
                   <button onClick={() => openEdit(b)} style={{ marginRight: 8 }}>Edit</button>
                   {/* Delete disabled
-<button onClick={() => removeBook(b.id, b.title)} style={{ color: "#b00020" }}>
-  Delete
-</button>
-*/}
-
+                  <button onClick={() => removeBook(b.id, b.title)} style={{ color: "#b00020" }}>
+                    Delete
+                  </button>
+                  */}
                 </td>
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td style={styles.td} colSpan={6}>No books found.</td></tr>
+              <tr><td style={styles.td} colSpan={7}>No books found.</td></tr>
             )}
           </tbody>
         </table>
@@ -800,6 +808,7 @@ function AdminManageBooks() {
 
             <Field label="Year (optional)" value={eYear} onChange={setEYear} />
             <Field label="ISBN (optional)" value={eIsbn} onChange={setEIsbn} />
+            <Field label="Call number (optional)" value={eCallNumber} onChange={setECallNumber} /> {/* NEW */}
 
             <label style={{ display: "grid", gap: 4 }}>
               <span>Replace front cover (optional)</span>
@@ -969,7 +978,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      {/* Non-fullscreen splash overlay (appears after 2s, lasts 5s, skippable) */}
+      {/* Non-fullscreen splash overlay (appears after 2s, lasts 4s, skippable) */}
       {showSplash && (
         <div style={styles.splashBackdrop}>
           <div style={styles.splashCard}>
