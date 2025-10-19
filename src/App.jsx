@@ -25,6 +25,7 @@ import "jspdf-autotable";
  * - User: gallery (hides 'hidden', shows 'In circulation' badge) + availability tabs
  * - Admin: Login → Add Book (image optional, category dropdown) → Manage Books (edit, toggle, hide, delete)
  * - Splash: after 2s, show a non-fullscreen overlay for 4s with “Skip” button
+ * - Book Preview Modal: bigger image, Next view (front/back), Order button
  */
 
 const WHATSAPP_NUMBER = "917025832552"; // change to your number, no '+'
@@ -66,7 +67,11 @@ function Gallery() {
   const [cat, setCat] = useState("all");
   // Tabs: "all" | "circulation"
   const [availTab, setAvailTab] = useState("all");
-  const [showBackMap, setShowBackMap] = useState({});
+
+  // Modal state
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalBookId, setModalBookId] = useState(null);
+  const [modalShowBack, setModalShowBack] = useState(false);
 
   const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
 
@@ -78,6 +83,15 @@ function Gallery() {
     });
     return () => unsub();
   }, []);
+
+  // Close on ESC
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key === "Escape") closeModal();
+    }
+    if (modalOpen) document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [modalOpen]);
 
   const visible = useMemo(() => books.filter((b) => !b.hidden), [books]);
 
@@ -105,10 +119,6 @@ function Gallery() {
 
   const grouped = useMemo(() => groupBy(filtered, (b) => b.category), [filtered]);
 
-  function toggleFlip(id) {
-    setShowBackMap((m) => ({ ...m, [id]: !m[id] }));
-  }
-
   function moreText(b) {
     const lines = [];
     if (b.description) lines.push(b.description);
@@ -116,6 +126,29 @@ function Gallery() {
     if (b.isbn) lines.push(`ISBN: ${b.isbn}`);
     return lines.length ? lines.join("\n\n") : "No details yet.";
   }
+
+  function openModal(b) {
+    setModalBookId(b.id);
+    setModalShowBack(false);
+    setModalOpen(true);
+  }
+  function closeModal() {
+    setModalOpen(false);
+    setModalBookId(null);
+    setModalShowBack(false);
+  }
+  function toggleView() {
+    const b = books.find((x) => x.id === modalBookId);
+    if (!b) return;
+    // Only allow toggle if back image exists
+    if (b.backImageURL) setModalShowBack((v) => !v);
+  }
+
+  const modalBook = modalBookId ? books.find((x) => x.id === modalBookId) : null;
+  const modalImgURL =
+    modalBook && modalShowBack && modalBook.backImageURL
+      ? modalBook.backImageURL
+      : modalBook?.imageURL || "/covers/placeholder.jpg";
 
   return (
     <div style={styles.page}>
@@ -203,8 +236,6 @@ function Gallery() {
               }}
             >
               {list.map((b) => {
-                const showBack = !!showBackMap[b.id];
-                const chosenURL = showBack ? (b.backImageURL || b.imageURL) : b.imageURL;
                 const isAvailable = b.available !== false;
                 const imgStyle = isMobile ? styles.cardImgMobile : styles.cardImg;
 
@@ -214,20 +245,20 @@ function Gallery() {
                       <div style={styles.badge}>In circulation</div>
                     )}
 
-                    {/* Click image to toggle front/back */}
-                    {chosenURL ? (
+                    {/* Click image -> open modal */}
+                    {b.imageURL ? (
                       <img
-                        src={chosenURL}
+                        src={b.imageURL}
                         alt={b.title}
                         style={imgStyle}
-                        onClick={() => toggleFlip(b.id)}
+                        onClick={() => openModal(b)}
                         onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")}
                       />
                     ) : (
                       <div
-                        onClick={() => toggleFlip(b.id)}
+                        onClick={() => openModal(b)}
                         style={{ ...imgStyle, display: "grid", placeItems: "center", background: "#fafafa", cursor: "pointer" }}
-                        title="Flip cover"
+                        title="Preview book"
                       >
                         <div style={{ padding: 8, textAlign: "center", fontWeight: 700 }}>{b.title}</div>
                       </div>
@@ -237,7 +268,6 @@ function Gallery() {
                       <div style={{ fontWeight: 700 }}>{b.title}</div>
                       <div style={{ color: "#555", fontSize: 13 }}>{b.author || ""}</div>
 
-                      {/* Year & ISBN removed from here; moved to details */}
                       <div style={{ marginTop: 8 }}>
                         <small>
                           <button
@@ -273,6 +303,69 @@ function Gallery() {
           Know more: <a href="tel:9746832552" style={{ color: "#2563eb", textDecoration: "none" }}>9746832552</a>
         </footer>
       </main>
+
+      {/* ====== BOOK PREVIEW MODAL ====== */}
+      {modalOpen && modalBook && (
+        <div style={styles.modalBackdrop} onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}>
+          <div style={styles.modalCard}>
+            <div style={styles.modalHeader}>
+              <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+                <div style={{ fontWeight: 700 }}>{modalBook.title || "Untitled"}</div>
+                {modalBook.author && <div style={{ fontSize: 12, color: "#666" }}>by {modalBook.author}</div>}
+              </div>
+              <button onClick={closeModal} style={styles.modalCloseBtn} title="Close">✕</button>
+            </div>
+
+            <div style={styles.modalBody}>
+              <div style={styles.modalMediaCol}>
+                <img
+                  src={modalImgURL}
+                  alt={modalBook.title}
+                  style={styles.modalImg}
+                  onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")}
+                />
+                <div style={styles.modalMediaControls}>
+                  <button
+                    onClick={toggleView}
+                    disabled={!modalBook.backImageURL}
+                    title={modalBook.backImageURL ? "Show next view" : "No back cover uploaded"}
+                    style={styles.modalSecondaryBtn}
+                  >
+                    {modalShowBack ? "Show front" : "Show back"}
+                  </button>
+                </div>
+              </div>
+
+              <div style={styles.modalInfoCol}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <span style={modalBook.available === false ? styles.statusPillRed : styles.statusPillGreen}>
+                    {modalBook.available === false ? "In circulation" : "Available"}
+                  </span>
+                </div>
+
+                <div style={{ marginTop: 10, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
+                  {modalBook.description ? modalBook.description : "No details yet."}
+                  {modalBook.year && <div style={{ marginTop: 8, color: "#555" }}><b>Year:</b> {modalBook.year}</div>}
+                  {modalBook.isbn && <div style={{ color: "#555" }}><b>ISBN:</b> {modalBook.isbn}</div>}
+                </div>
+
+                <div style={{ marginTop: 16, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <a
+                    href={waLinkFor(modalBook)}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    style={styles.waBtn}
+                    title="Order on WhatsApp"
+                  >
+                    📦 Order on WhatsApp
+                  </a>
+                  <button onClick={closeModal} style={styles.modalSecondaryBtn}>Close</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -360,7 +453,7 @@ function AdminAddBook() {
   const [customCategory, setCustomCategory] = useState("");
   const [year, setYear] = useState("");
   const [isbn, setIsbn] = useState("");
-  const [callNumber, setCallNumber] = useState(""); // NEW: optional
+  const [callNumber, setCallNumber] = useState(""); // optional, not shown to users
   const [file, setFile] = useState(null);         // front cover (optional)
   const [backFile, setBackFile] = useState(null); // back cover (optional)
   const [description, setDescription] = useState(""); // optional
@@ -400,7 +493,7 @@ function AdminAddBook() {
         category: finalCategory,
         year: year.trim(),           // optional
         isbn: isbn.trim(),           // optional
-        callNumber: callNumber.trim(), // NEW optional
+        callNumber: callNumber.trim(), // optional
         imageURL: frontURL,
         backImageURL: backURL,
         description: description.trim(),
@@ -457,7 +550,7 @@ function AdminAddBook() {
 
         <Field label="Year (optional)" value={year} onChange={setYear} />
         <Field label="ISBN (optional)" value={isbn} onChange={setIsbn} />
-        <Field label="Call number (optional)" value={callNumber} onChange={setCallNumber} /> {/* NEW */}
+        <Field label="Call number (optional)" value={callNumber} onChange={setCallNumber} />
 
         <label style={{ display: "grid", gap: 4 }}>
           <span>Front cover (optional)</span>
@@ -495,7 +588,7 @@ function AdminManageBooks() {
   const [eCustomCategory, setECustomCategory] = useState("");
   const [eYear, setEYear] = useState("");
   const [eIsbn, setEIsbn] = useState("");
-  const [eCallNumber, setECallNumber] = useState(""); // NEW
+  const [eCallNumber, setECallNumber] = useState("");
   const [eDesc, setEDesc] = useState("");
   const [eAvail, setEAvail] = useState(true);
   const [eHidden, setEHidden] = useState(false);
@@ -559,7 +652,7 @@ function AdminManageBooks() {
     }
     setEYear(b.year || "");
     setEIsbn(b.isbn || "");
-    setECallNumber(b.callNumber || ""); // NEW
+    setECallNumber(b.callNumber || "");
     setEDesc(b.description || "");
     setEAvail(b.available !== false);
     setEHidden(!!b.hidden);
@@ -583,7 +676,7 @@ function AdminManageBooks() {
         category: finalCategory,
         year: eYear.trim(),     // optional
         isbn: eIsbn.trim(),     // optional
-        callNumber: eCallNumber.trim(), // NEW optional
+        callNumber: eCallNumber.trim(), // optional
         description: eDesc.trim(),
         available: eAvail,
         hidden: eHidden,
@@ -623,14 +716,14 @@ function AdminManageBooks() {
     URL.revokeObjectURL(url);
   }
   function exportCSV() {
-    const header = ["title","author","category","year","isbn","callNumber","imageURL","backImageURL","description","available","hidden","createdAt"]; // NEW callNumber
+    const header = ["title","author","category","year","isbn","callNumber","imageURL","backImageURL","description","available","hidden","createdAt"];
     const rows = books.map(b => [
       b.title || "",
       b.author || "",
       b.category || "",
       b.year || "",
       b.isbn || "",
-      b.callNumber || "", // NEW
+      b.callNumber || "",
       b.imageURL || "",
       b.backImageURL || "",
       (b.description || "").replace(/\r?\n/g, " "),
@@ -743,7 +836,7 @@ function AdminManageBooks() {
                     <span>{b.available !== false ? "Available" : "In circulation"}</span>
                   </label>
                 </td>
-                <td style={styles.td}>{b.callNumber || "—"}</td> {/* NEW column */}
+                <td style={styles.td}>{b.callNumber || "—"}</td>
                 <td style={styles.td}>{b.category || "—"}</td>
                 <td style={styles.td}>
                   <label style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
@@ -808,7 +901,7 @@ function AdminManageBooks() {
 
             <Field label="Year (optional)" value={eYear} onChange={setEYear} />
             <Field label="ISBN (optional)" value={eIsbn} onChange={setEIsbn} />
-            <Field label="Call number (optional)" value={eCallNumber} onChange={setECallNumber} /> {/* NEW */}
+            <Field label="Call number (optional)" value={eCallNumber} onChange={setECallNumber} />
 
             <label style={{ display: "grid", gap: 4 }}>
               <span>Replace front cover (optional)</span>
@@ -944,6 +1037,101 @@ const styles = {
     padding: "4px 10px",
     cursor: "pointer",
     fontSize: 13
+  },
+
+  /* ===== Book Preview Modal ===== */
+  modalBackdrop: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(0,0,0,0.45)",
+    display: "grid",
+    placeItems: "center",
+    zIndex: 1200,
+    padding: 12,
+  },
+  modalCard: {
+    background: "#fff",
+    width: "min(96vw, 980px)",
+    maxHeight: "90vh",
+    borderRadius: 16,
+    border: "1px solid #e5e5e5",
+    boxShadow: "0 16px 50px rgba(0,0,0,0.35)",
+    display: "grid",
+    gridTemplateRows: "auto 1fr",
+    overflow: "hidden",
+  },
+  modalHeader: {
+    padding: "10px 12px",
+    borderBottom: "1px solid #eee",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    background: "#fafafa"
+  },
+  modalCloseBtn: {
+    border: "1px solid #ddd",
+    background: "#fff",
+    borderRadius: 8,
+    padding: "4px 10px",
+    cursor: "pointer",
+    fontSize: 13
+  },
+  modalBody: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 12,
+    padding: 12,
+  },
+  modalMediaCol: {
+    display: "grid",
+    gridTemplateRows: "1fr auto",
+    gap: 8,
+    minHeight: 0,
+  },
+  modalImg: {
+    width: "100%",
+    height: "60vh",
+    maxHeight: 520,
+    objectFit: "contain",
+    background: "#000",
+    borderRadius: 12,
+  },
+  modalMediaControls: {
+    display: "flex",
+    gap: 8,
+    justifyContent: "flex-start",
+  },
+  modalInfoCol: {
+    minHeight: 0,
+    overflowY: "auto",
+    paddingRight: 4,
+  },
+  modalSecondaryBtn: {
+    border: "1px solid #ddd",
+    background: "#fff",
+    borderRadius: 8,
+    padding: "6px 10px",
+    cursor: "pointer",
+    fontSize: 14
+  },
+  statusPillGreen: {
+    display: "inline-block",
+    background: "#e8fff0",
+    border: "1px solid #7bd6a7",
+    color: "#0a7d33",
+    fontSize: 12,
+    padding: "2px 8px",
+    borderRadius: 999,
+  },
+  statusPillRed: {
+    display: "inline-block",
+    background: "#ffeff0",
+    border: "1px solid #ff9aa6",
+    color: "#b00020",
+    fontSize: 12,
+    padding: "2px 8px",
+    borderRadius: 999,
   },
 };
 
