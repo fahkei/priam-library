@@ -281,7 +281,7 @@ function Gallery() {
 /* ===================== ADMIN SIDE ===================== */
 function Admin() {
   const [user, setUser] = useState(null);
-  const [adminTab, setAdminTab] = useState("add"); // "add" | "manage"
+  const [adminTab, setAdminTab] = useState("manage"); // "add" | "manage"
   const nav = useNavigate();
   const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
 
