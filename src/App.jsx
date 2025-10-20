@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { BrowserRouter, Routes, Route, Link, Navigate, useNavigate } from "react-router-dom";
 import { auth, db, storage } from "./firebase";
+import usePageTracking from "./usePageTracking";
+
 import {
   signInWithEmailAndPassword,
   signOut,
@@ -1186,6 +1188,7 @@ const styles = {
 
 /* ---- Router + Splash ---- */
 export default function App() {
+  usePageTracking();
   // Splash logic: start hidden, show after 2s, auto-hide after 4s (or on Skip)
   const [showSplash, setShowSplash] = useState(false);
   const showTimerRef = useRef(null);
