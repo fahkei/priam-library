@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { BrowserRouter, Routes, Route, Link, Navigate, useNavigate } from "react-router-dom";
-import { auth, db, storage } from "./firebase";
+import { Analytics } from "@vercel/analytics/react";
 import usePageTracking from "./usePageTracking";
-import { Analytics } from "@vercel/analytics/react"
 
+import { auth, db, storage } from "./firebase";
 import {
   signInWithEmailAndPassword,
   signOut,
@@ -18,17 +18,18 @@ import {
   orderBy,
   doc,
   updateDoc,
-  deleteDoc,
+  deleteDoc, // (kept even if delete button hidden)
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 
 /** PRIAM LIBRARY APP
- * - User: gallery (hides 'hidden', shows 'In circulation' badge) + availability tabs
- * - Admin: Login → Add Book (image optional, category dropdown) → Manage Books (edit, toggle, hide, delete)
- * - Splash: after 2s, show a non-fullscreen overlay for 4s with “Skip” button
+ * - User: gallery (hides 'hidden', shows 'In circulation' badge) + tabs (All / In circulation)
  * - Book Preview Modal: big image on top, details below; Prev/Next; keyboard nav (←/→, F/Space, Esc)
+ * - Admin: Login → Add Book (image optional, category dropdown; title/author required; year/isbn/callNumber optional)
+ *          Manage Books (edit, toggle availability, hide, export; delete button disabled)
+ * - Splash: after 2s, show a non-fullscreen overlay for 4s with “Close” button
  */
 
 const WHATSAPP_NUMBER = "917025832552"; // change to your number, no '+'
@@ -68,6 +69,7 @@ function Gallery() {
   const [books, setBooks] = useState([]);
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("all");
+
   // Tabs: "all" | "circulation"
   const [availTab, setAvailTab] = useState("all");
 
@@ -155,7 +157,7 @@ function Gallery() {
     setModalShowBack(false);
   }
 
-  // Keyboard controls (when modal is open)
+  // Keyboard controls for modal
   useEffect(() => {
     function onKey(e) {
       if (!modalOpen) return;
@@ -210,7 +212,7 @@ function Gallery() {
           </div>
         </div>
 
-        {/* Small Admin link on top-right */}
+        {/* Admin link on top-right */}
         <Link to="/admin" style={styles.adminLink} title="Admin">
           Admin
         </Link>
@@ -275,9 +277,7 @@ function Gallery() {
 
                 return (
                   <article key={b.id} style={{ ...styles.card, position: "relative" }}>
-                    {b.available === false && (
-                      <div style={styles.badge}>In circulation</div>
-                    )}
+                    {b.available === false && <div style={styles.badge}>In circulation</div>}
 
                     {/* Click image -> open modal */}
                     {b.imageURL ? (
@@ -304,10 +304,7 @@ function Gallery() {
 
                       <div style={{ marginTop: 8 }}>
                         <small>
-                          <button
-                            onClick={() => alert(moreText(b))}
-                            style={styles.moreLink}
-                          >
+                          <button onClick={() => alert(moreText(b))} style={styles.moreLink}>
                             More about the book
                           </button>
                         </small>
@@ -334,13 +331,21 @@ function Gallery() {
 
         {/* Footer with phone */}
         <footer style={{ marginTop: 24, textAlign: "center", fontSize: 14, color: "#444" }}>
-          Know more: <a href="tel:9746832552" style={{ color: "#2563eb", textDecoration: "none" }}>9746832552</a>
+          Know more:{" "}
+          <a href="tel:9746832552" style={{ color: "#2563eb", textDecoration: "none" }}>
+            9746832552
+          </a>
         </footer>
       </main>
 
       {/* ====== BOOK PREVIEW MODAL ====== */}
       {modalOpen && modalBook && (
-        <div style={styles.modalBackdrop} onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}>
+        <div
+          style={styles.modalBackdrop}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeModal();
+          }}
+        >
           <div style={styles.modalCard}>
             <div style={styles.modalHeader}>
               <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
@@ -350,7 +355,9 @@ function Gallery() {
                   {modalBook.available === false ? "In circulation" : "Available"}
                 </span>
               </div>
-              <button onClick={closeModal} style={styles.modalCloseBtn} title="Close">✕</button>
+              <button onClick={closeModal} style={styles.modalCloseBtn} title="Close">
+                ✕
+              </button>
             </div>
 
             {/* IMAGE FIRST (big), details below */}
@@ -363,8 +370,12 @@ function Gallery() {
                   onError={(e) => (e.currentTarget.src = "/covers/placeholder.jpg")}
                 />
                 {/* Overlay Prev / Next */}
-                <button onClick={goPrev} style={{ ...styles.overlayNavBtn, left: 8 }} title="Previous (←)">‹</button>
-                <button onClick={goNext} style={{ ...styles.overlayNavBtn, right: 8 }} title="Next (→)">›</button>
+                <button onClick={goPrev} style={{ ...styles.overlayNavBtn, left: 8 }} title="Previous (←)">
+                  ‹
+                </button>
+                <button onClick={goNext} style={{ ...styles.overlayNavBtn, right: 8 }} title="Next (→)">
+                  ›
+                </button>
 
                 {/* Inline controls under image */}
                 <div style={styles.modalMediaControls}>
@@ -394,8 +405,16 @@ function Gallery() {
                   {modalBook.description ? modalBook.description : "No details yet."}
                 </div>
                 <div style={{ marginTop: 8, color: "#555", display: "grid", gap: 4 }}>
-                  {modalBook.year && <div><b>Year:</b> {modalBook.year}</div>}
-                  {modalBook.isbn && <div><b>ISBN:</b> {modalBook.isbn}</div>}
+                  {modalBook.year && (
+                    <div>
+                      <b>Year:</b> {modalBook.year}
+                    </div>
+                  )}
+                  {modalBook.isbn && (
+                    <div>
+                      <b>ISBN:</b> {modalBook.isbn}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -434,13 +453,23 @@ function Admin() {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button onClick={() => setAdminTab("add")}>➕ Add Book</button>
           <button onClick={() => setAdminTab("manage")}>🗂 Manage Books</button>
-          <button onClick={async () => { await signOut(auth); nav("/"); }}>Logout</button>
+          <button
+            onClick={async () => {
+              await signOut(auth);
+              nav("/");
+            }}
+          >
+            Logout
+          </button>
         </div>
       </header>
       <main style={{ ...styles.main, padding: isMobile ? 12 : 16, maxWidth: isMobile ? 560 : 1100 }}>
         {adminTab === "add" ? <AdminAddBook /> : <AdminManageBooks />}
         <footer style={{ marginTop: 24, textAlign: "center", fontSize: 14, color: "#444" }}>
-          Know more: <a href="tel:9746832552" style={{ color: "#2563eb", textDecoration: "none" }}>9746832552</a>
+          Know more:{" "}
+          <a href="tel:9746832552" style={{ color: "#2563eb", textDecoration: "none" }}>
+            9746832552
+          </a>
         </footer>
       </main>
     </div>
@@ -475,14 +504,18 @@ function AdminLogin() {
           <input type="password" value={pass} onChange={(e) => setPass(e.target.value)} />
         </label>
         {err && <div style={{ color: "#b00020", fontSize: 12 }}>{err}</div>}
-        <button type="submit" style={{ marginTop: 8 }}>Login</button>
-        <div style={{ marginTop: 8 }}><Link to="/">← Back to site</Link></div>
+        <button type="submit" style={{ marginTop: 8 }}>
+          Login
+        </button>
+        <div style={{ marginTop: 8 }}>
+          <Link to="/">← Back to site</Link>
+        </div>
       </form>
     </div>
   );
 }
 
-/* ---- Add Book (image OPTIONAL; category dropdown) ---- */
+/* ---- Add Book (image OPTIONAL; year/isbn/callNumber optional) ---- */
 function AdminAddBook() {
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
@@ -491,7 +524,7 @@ function AdminAddBook() {
   const [year, setYear] = useState("");
   const [isbn, setIsbn] = useState("");
   const [callNumber, setCallNumber] = useState(""); // optional, not shown to users
-  const [file, setFile] = useState(null);         // front cover (optional)
+  const [file, setFile] = useState(null); // front cover (optional)
   const [backFile, setBackFile] = useState(null); // back cover (optional)
   const [description, setDescription] = useState(""); // optional
   const [busy, setBusy] = useState(false);
@@ -502,8 +535,9 @@ function AdminAddBook() {
   async function handleSubmit(e) {
     e.preventDefault();
     if (!title.trim()) return setMsg("Title is required");
-    if (!author.trim()) return setMsg("Author is required"); // <- Author mandatory
-    setMsg(""); setBusy(true);
+    if (!author.trim()) return setMsg("Author is required");
+    setMsg("");
+    setBusy(true);
 
     try {
       const finalCategory = categorySel === "custom" ? customCategory.trim() : categorySel;
@@ -528,8 +562,8 @@ function AdminAddBook() {
         title: title.trim(),
         author: author.trim(),
         category: finalCategory,
-        year: year.trim(),           // optional
-        isbn: isbn.trim(),           // optional
+        year: year.trim(), // optional
+        isbn: isbn.trim(), // optional
         callNumber: callNumber.trim(), // optional
         imageURL: frontURL,
         backImageURL: backURL,
@@ -539,10 +573,16 @@ function AdminAddBook() {
         createdAt: serverTimestamp(),
       });
 
-      setTitle(""); setAuthor("");
-      setCategorySel(DEFAULT_CATEGORIES[0]); setCustomCategory("");
-      setYear(""); setIsbn(""); setCallNumber("");
-      setFile(null); setBackFile(null); setDescription("");
+      setTitle("");
+      setAuthor("");
+      setCategorySel(DEFAULT_CATEGORIES[0]);
+      setCustomCategory("");
+      setYear("");
+      setIsbn("");
+      setCallNumber("");
+      setFile(null);
+      setBackFile(null);
+      setDescription("");
       setMsg("✅ Book added successfully");
     } catch (e) {
       console.error(e);
@@ -569,7 +609,9 @@ function AdminAddBook() {
           <span>Category</span>
           <select value={categorySel} onChange={(e) => setCategorySel(e.target.value)}>
             {DEFAULT_CATEGORIES.map((c) => (
-              <option key={c} value={c}>{c}</option>
+              <option key={c} value={c}>
+                {c}
+              </option>
             ))}
             <option value="custom">Custom…</option>
           </select>
@@ -577,11 +619,7 @@ function AdminAddBook() {
         {categorySel === "custom" && (
           <label style={{ display: "grid", gap: 4 }}>
             <span>Custom category</span>
-            <input
-              placeholder="Type your category"
-              value={customCategory}
-              onChange={(e) => setCustomCategory(e.target.value)}
-            />
+            <input placeholder="Type your category" value={customCategory} onChange={(e) => setCustomCategory(e.target.value)} />
           </label>
         )}
 
@@ -604,14 +642,16 @@ function AdminAddBook() {
         </label>
       </div>
       <div style={{ marginTop: 12 }}>
-        <button disabled={busy} type="submit">{busy ? "Uploading…" : "Add book"}</button>
+        <button disabled={busy} type="submit">
+          {busy ? "Uploading…" : "Add book"}
+        </button>
         {msg && <div style={{ marginTop: 8, color: msg.startsWith("✅") ? "#0a7d33" : "#b00020" }}>{msg}</div>}
       </div>
     </form>
   );
 }
 
-/* ---- Manage Books (edit, toggle availability, hide/unhide, delete) ---- */
+/* ---- Manage Books (edit, toggle availability, hide/unhide, export; delete hidden) ---- */
 function AdminManageBooks() {
   const [books, setBooks] = useState([]);
   const [q, setQ] = useState("");
@@ -644,9 +684,7 @@ function AdminManageBooks() {
 
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
-    return books.filter(b =>
-      !t || `${b.title} ${b.author || ""} ${b.isbn || ""}`.toLowerCase().includes(t)
-    );
+    return books.filter((b) => !t || `${b.title} ${b.author || ""} ${b.isbn || ""}`.toLowerCase().includes(t));
   }, [books, q]);
 
   async function setAvailability(id, nextVal) {
@@ -663,6 +701,7 @@ function AdminManageBooks() {
       alert("Failed to update visibility: " + (e.message || ""));
     }
   }
+  // Delete kept in code (not shown in UI)
   async function removeBook(id, title) {
     const ok = window.confirm(`Delete “${title}” permanently? This cannot be undone.`);
     if (!ok) return;
@@ -704,15 +743,14 @@ function AdminManageBooks() {
     if (!editing) return;
     setSaving(true);
     try {
-      const finalCategory =
-        eCategorySel === "custom" ? eCustomCategory.trim() : eCategorySel;
+      const finalCategory = eCategorySel === "custom" ? eCustomCategory.trim() : eCategorySel;
 
       const updates = {
         title: eTitle.trim(),
         author: eAuthor.trim(),
         category: finalCategory,
-        year: eYear.trim(),     // optional
-        isbn: eIsbn.trim(),     // optional
+        year: eYear.trim(), // optional
+        isbn: eIsbn.trim(), // optional
         callNumber: eCallNumber.trim(), // optional
         description: eDesc.trim(),
         available: eAvail,
@@ -753,8 +791,21 @@ function AdminManageBooks() {
     URL.revokeObjectURL(url);
   }
   function exportCSV() {
-    const header = ["title","author","category","year","isbn","callNumber","imageURL","backImageURL","description","available","hidden","createdAt"];
-    const rows = books.map(b => [
+    const header = [
+      "title",
+      "author",
+      "category",
+      "year",
+      "isbn",
+      "callNumber",
+      "imageURL",
+      "backImageURL",
+      "description",
+      "available",
+      "hidden",
+      "createdAt",
+    ];
+    const rows = books.map((b) => [
       b.title || "",
       b.author || "",
       b.category || "",
@@ -766,9 +817,9 @@ function AdminManageBooks() {
       (b.description || "").replace(/\r?\n/g, " "),
       b.available === false ? "false" : "true",
       b.hidden ? "true" : "false",
-      b.createdAt?.toDate ? b.createdAt.toDate().toISOString() : ""
+      b.createdAt?.toDate ? b.createdAt.toDate().toISOString() : "",
     ]);
-    const csv = [header.join(","), ...rows.map(r => r.map(val => `"${String(val).replace(/"/g,'""')}"`).join(","))].join("\n");
+    const csv = [header.join(","), ...rows.map((r) => r.map((val) => `"${String(val).replace(/"/g, '""')}"`).join(","))].join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -802,16 +853,24 @@ function AdminManageBooks() {
         img.src = url;
       });
     }
-    const x0 = 40, y0 = 60;
-    const imgW = 60, imgH = 80, gap = 14;
+    const x0 = 40,
+      y0 = 60;
+    const imgW = 60,
+      imgH = 80,
+      gap = 14;
     const cols = 3;
     const pageH = pdf.internal.pageSize.getHeight();
-    let col = 0, x = x0, y = y0;
+    let col = 0,
+      x = x0,
+      y = y0;
     for (const b of books) {
       const url = b.imageURL || "/covers/placeholder.jpg";
       const dataURL = await imgUrlToDataURL(url);
       if (dataURL) pdf.addImage(dataURL, "PNG", x, y, imgW, imgH);
-      else { pdf.setFillColor(240); pdf.rect(x, y, imgW, imgH, "F"); }
+      else {
+        pdf.setFillColor(240);
+        pdf.rect(x, y, imgW, imgH, "F");
+      }
       pdf.setFontSize(9);
       const title = b.title || "Untitled";
       const author = b.author ? `by ${b.author}` : "";
@@ -820,9 +879,17 @@ function AdminManageBooks() {
       if (author) pdf.text(author, x, y + imgH + 24, { maxWidth: imgW });
       if (status) pdf.text(status, x, y + imgH + 36, { maxWidth: imgW });
       col++;
-      if (col >= cols) { col = 0; x = x0; y += imgH + 60;
-        if (y > pageH - 100) { pdf.addPage(); y = y0; } }
-      else { x += imgW + gap; }
+      if (col >= cols) {
+        col = 0;
+        x = x0;
+        y += imgH + 60;
+        if (y > pageH - 100) {
+          pdf.addPage();
+          y = y0;
+        }
+      } else {
+        x += imgW + gap;
+      }
     }
     pdf.save("priam_books_with_images.pdf");
   }
@@ -886,8 +953,11 @@ function AdminManageBooks() {
                   </label>
                 </td>
                 <td style={styles.td}>
-                  <button onClick={() => openEdit(b)} style={{ marginRight: 8 }}>Edit</button>
-                  {/* Delete disabled
+                  <button onClick={() => openEdit(b)} style={{ marginRight: 8 }}>
+                    Edit
+                  </button>
+                  {/* Delete intentionally hidden to avoid accidental removal */}
+                  {/*
                   <button onClick={() => removeBook(b.id, b.title)} style={{ color: "#b00020" }}>
                     Delete
                   </button>
@@ -896,7 +966,11 @@ function AdminManageBooks() {
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td style={styles.td} colSpan={7}>No books found.</td></tr>
+              <tr>
+                <td style={styles.td} colSpan={7}>
+                  No books found.
+                </td>
+              </tr>
             )}
           </tbody>
         </table>
@@ -920,7 +994,9 @@ function AdminManageBooks() {
               <span>Category</span>
               <select value={eCategorySel} onChange={(e) => setECategorySel(e.target.value)}>
                 {DEFAULT_CATEGORIES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
                 ))}
                 <option value="custom">Custom…</option>
               </select>
@@ -928,11 +1004,7 @@ function AdminManageBooks() {
             {eCategorySel === "custom" && (
               <label style={{ display: "grid", gap: 4 }}>
                 <span>Custom category</span>
-                <input
-                  placeholder="Type your category"
-                  value={eCustomCategory}
-                  onChange={(e) => setECustomCategory(e.target.value)}
-                />
+                <input placeholder="Type your category" value={eCustomCategory} onChange={(e) => setECustomCategory(e.target.value)} />
               </label>
             )}
 
@@ -965,7 +1037,9 @@ function AdminManageBooks() {
           </div>
 
           <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button disabled={saving} onClick={saveEdit}>{saving ? "Saving…" : "Save changes"}</button>
+            <button disabled={saving} onClick={saveEdit}>
+              {saving ? "Saving…" : "Save changes"}
+            </button>
             <button onClick={cancelEdit}>Cancel</button>
           </div>
         </div>
@@ -988,9 +1062,15 @@ function Field({ label, value, onChange }) {
 const styles = {
   page: { fontFamily: "system-ui, Arial, sans-serif", background: "#f7f7fb", minHeight: "100vh" },
   header: {
-    position: "sticky", top: 0, zIndex: 10, background: "#fff",
-    borderBottom: "1px solid #ddd", padding: "12px 16px",
-    display: "flex", justifyContent: "space-between", alignItems: "center"
+    position: "sticky",
+    top: 0,
+    zIndex: 10,
+    background: "#fff",
+    borderBottom: "1px solid #ddd",
+    padding: "12px 16px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   logoBox: { width: 40, height: 40, border: "1px solid #ddd", borderRadius: 12, display: "grid", placeItems: "center" },
 
@@ -1001,7 +1081,7 @@ const styles = {
     background: "#fff",
     textDecoration: "none",
     color: "#333",
-    fontSize: 13
+    fontSize: 13,
   },
 
   tab: { padding: "6px 10px", background: "#f3f3f3", border: "1px solid #ddd", borderRadius: 8, textDecoration: "none", color: "#222" },
@@ -1054,7 +1134,7 @@ const styles = {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    background: "#fafafa"
+    background: "#fafafa",
   },
   splashBody: {
     padding: 0,
@@ -1073,7 +1153,7 @@ const styles = {
     borderRadius: 8,
     padding: "4px 10px",
     cursor: "pointer",
-    fontSize: 13
+    fontSize: 13,
   },
 
   /* ===== Book Preview Modal (stacked) ===== */
@@ -1104,7 +1184,7 @@ const styles = {
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
-    background: "#fafafa"
+    background: "#fafafa",
   },
   modalCloseBtn: {
     border: "1px solid #ddd",
@@ -1112,7 +1192,7 @@ const styles = {
     borderRadius: 8,
     padding: "4px 10px",
     cursor: "pointer",
-    fontSize: 13
+    fontSize: 13,
   },
 
   modalBodyStack: {
@@ -1160,7 +1240,7 @@ const styles = {
     borderRadius: 8,
     padding: "6px 10px",
     cursor: "pointer",
-    fontSize: 14
+    fontSize: 14,
   },
   modalInfoBelow: {
     padding: "4px 2px 8px",
@@ -1187,19 +1267,22 @@ const styles = {
   },
 };
 
-/* ---- Router + Splash ---- */
-export default function App() {
+/* ---- Router + Splash + Analytics ---- */
+function Tracking() {
+  // Put page-tracking hook INSIDE the Router context
   usePageTracking();
-  // Splash logic: start hidden, show after 2s, auto-hide after 4s (or on Skip)
+  return null;
+}
+
+export default function App() {
+  // Splash logic: start hidden, show after 2s, auto-hide after 4s (or on Close)
   const [showSplash, setShowSplash] = useState(false);
   const showTimerRef = useRef(null);
   const hideTimerRef = useRef(null);
 
   useEffect(() => {
-    // After 2 seconds, show
     showTimerRef.current = setTimeout(() => {
       setShowSplash(true);
-      // After 4 seconds of being shown, hide
       hideTimerRef.current = setTimeout(() => {
         setShowSplash(false);
       }, 4000);
@@ -1219,13 +1302,16 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <Tracking />
       {/* Non-fullscreen splash overlay (appears after 2s, lasts 4s, skippable) */}
       {showSplash && (
         <div style={styles.splashBackdrop}>
           <div style={styles.splashCard}>
             <div style={styles.splashHeader}>
               <div style={{ fontWeight: 600, fontSize: 14 }}>Welcome to PRIAM</div>
-              <button onClick={skipSplash} style={styles.splashSkip} title="Close">✕</button>
+              <button onClick={skipSplash} style={styles.splashSkip} title="Close">
+                ✕
+              </button>
             </div>
             <div style={styles.splashBody}>
               {/* change to /flash.png or /flash.webp if your file has a different extension */}
@@ -1233,7 +1319,9 @@ export default function App() {
                 src="/flash.jpeg"
                 alt="PRIAM"
                 style={styles.splashImgContained}
-                onError={(e)=>{ e.currentTarget.src="/flash.png"; }}
+                onError={(e) => {
+                  e.currentTarget.src = "/flash.png";
+                }}
               />
             </div>
           </div>
@@ -1245,6 +1333,9 @@ export default function App() {
         <Route path="/admin" element={<Admin />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+
+      {/* Vercel Analytics */}
+      <Analytics />
     </BrowserRouter>
   );
 }
